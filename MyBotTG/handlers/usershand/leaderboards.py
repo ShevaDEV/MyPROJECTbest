@@ -62,7 +62,7 @@ async def get_leaderboard_with_position(user_id: int) -> str:
     return leaderboard_text
 
 @leaderboard_router.message(Command("top"))
-@leaderboard_router.message(lambda message: message.text.lower() == "Лидеры")
+@leaderboard_router.message(lambda message: message.text.lower() == "лидеры")
 async def show_leaderboard(message: types.Message):
     """Отправляет топ-10 игроков с позицией текущего пользователя."""
     user_id = message.from_user.id

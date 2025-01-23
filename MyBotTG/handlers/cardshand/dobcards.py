@@ -1,11 +1,12 @@
+import os
+import sqlite3
+import random
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from config import OWNER_ID, AVAILABLE_UNIVERSES
-import sqlite3
-import random
 
 dobcards_router = Router()
 
@@ -79,19 +80,22 @@ async def card_universe_received(message: types.Message, state: FSMContext):
 
 @dobcards_router.message(AddCardState.waiting_for_photo, F.photo)
 async def card_photo_received(message: types.Message, state: FSMContext):
-    photo_id = message.photo[-1].file_id
-    await state.update_data(photo_id=photo_id)
+    universe = (await state.get_data())["universe"]
+    photo = message.photo[-1]
+
+    # Сохраняем изображение в локальную папку
+    folder_path = f"images/{universe}"
+    os.makedirs(folder_path, exist_ok=True)  # Создаем папку, если она не существует
+    file_path = f"{folder_path}/{photo.file_unique_id}.jpg"
+
+    # Получаем файл и загружаем его
+    file = await message.bot.get_file(photo.file_id)
+    await message.bot.download_file(file.file_path, destination=file_path)
+
+    await state.update_data(photo_path=file_path)
     await message.answer("Введите название карты.")
     await state.set_state(AddCardState.waiting_for_name)
 
-@dobcards_router.message(AddCardState.waiting_for_photo)
-@dobcards_router.message(AddCardState.waiting_for_name)
-@dobcards_router.message(AddCardState.waiting_for_rarity)
-async def handle_cancel(message: types.Message, state: FSMContext):
-    if message.text.lower() == "отмена":
-        await message.answer("Добавление карты отменено.", reply_markup=ReplyKeyboardRemove())
-        await state.clear()
-        return
 
 @dobcards_router.message(AddCardState.waiting_for_name)
 async def card_name_received(message: types.Message, state: FSMContext):
@@ -115,7 +119,7 @@ async def card_rarity_received(message: types.Message, state: FSMContext):
 
     # Получаем данные из состояния
     card_data = await state.get_data()
-    photo_id = card_data["photo_id"]
+    photo_path = card_data["photo_path"]
     name = card_data["name"]
     universe = card_data["universe"]
 
@@ -139,9 +143,9 @@ async def card_rarity_received(message: types.Message, state: FSMContext):
 
     # Сохраняем карту в базу данных
     cursor.execute(f"""
-    INSERT INTO {universe} (name, photo_id, rarity, attack, hp, points)
+    INSERT INTO {universe} (name, photo_path, rarity, attack, hp, points)
     VALUES (?, ?, ?, ?, ?, ?)
-    """, (name, photo_id, rarity, attack, hp, points))
+    """, (name, photo_path, rarity, attack, hp, points))
     conn.commit()
     conn.close()
 

@@ -1,9 +1,10 @@
 from aiogram import Router, types, F
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile, InputMediaPhoto
 from handlers.cardshand.callbackcards import RarityCallback, ReturnCallback
 from kbds.inlinecards import rarity_keyboard_for_user, pagination_keyboard
 import sqlite3
+import os
 
 cardsall_router = Router()
 
@@ -85,7 +86,7 @@ async def show_cards_by_rarity(callback: types.CallbackQuery, callback_data: Rar
 
     # Получаем карты указанной редкости для выбранной вселенной
     cursor.execute(f"""
-    SELECT c.card_id, c.name, c.photo_id, c.rarity, c.points
+    SELECT c.card_id, c.name, c.photo_path, c.rarity, c.points
     FROM user_cards uc
     JOIN [{universe}] c ON uc.card_id = c.card_id
     WHERE uc.user_id = ? AND c.rarity = ?
@@ -105,12 +106,26 @@ async def show_cards_by_rarity(callback: types.CallbackQuery, callback_data: Rar
         return
 
     # Если карты есть, отправляем данные первой карты
-    card_id, name, photo_id, rarity, points = cards[0]
+    card_id, name, photo_path, rarity, points = cards[0]
+
+    # Проверяем существование изображения
+    if not os.path.isfile(photo_path):
+        await callback.message.edit_text(
+            f"Ошибка: файл изображения для карты '{name}' не найден.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Вернуться", callback_data=ReturnCallback(action="to_categories").pack())]
+            ])
+        )
+        return
 
     # Создаем сообщение о карте
-    media = types.InputMediaPhoto(
-        media=photo_id,
-        caption=f"Карта: «*{name}*»\nРедкость: *{rarity.capitalize()}*\nОчки: *{points}*",
+    media = InputMediaPhoto(
+        media=FSInputFile(photo_path),
+    caption = (
+        f"🃏 *Карта*: «*{name}*»\n"
+        f"🎲 *Редкость*: *{rarity.capitalize()}*\n"
+        f"💎 *Очки*: *{points}*"
+    ),
         parse_mode="Markdown"
     )
 

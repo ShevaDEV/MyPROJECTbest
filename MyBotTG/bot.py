@@ -28,6 +28,9 @@ from cards.admincardedit import admincardedit_router
 
 
 
+
+print(f"Текущая рабочая директория: {os.getcwd()}")
+
 load_dotenv(find_dotenv())
 
 init_db()

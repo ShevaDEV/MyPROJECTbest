@@ -3,6 +3,8 @@ from aiogram.filters import Command
 from datetime import datetime, timedelta
 from random import choices
 import sqlite3
+import os
+from aiogram.types import FSInputFile
 from config import OWNER_ID
 
 cardreceive_router = Router()
@@ -60,10 +62,23 @@ async def give_card(message: types.Message):
         cursor.execute("UPDATE users SET spins = spins - 1 WHERE user_id = ?", (user_id,))
         conn.commit()
     else:
-        if await check_cooldown(user_id):
-            await message.answer("Вы уже получали карту! Попробуйте позже.")
-            conn.close()
-            return
+        # Проверяем кулдаун
+        cursor.execute("SELECT last_card_time FROM users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        if result and result[0]:
+            last_time = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
+            next_available_time = last_time + timedelta(hours=CARD_RECEIVE_COOLDOWN)
+            time_remaining = next_available_time - datetime.now()
+
+            if time_remaining > timedelta(0):
+                # Форматируем оставшееся время
+                hours, remainder = divmod(time_remaining.seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
+                await message.answer(
+                    f"Вы уже получали карту! Следующая будет доступна через {hours} час(а) и {minutes} минут(ы)."
+                )
+                conn.close()
+                return
 
     # Проверяем выбранную вселенную
     cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,))
@@ -75,7 +90,7 @@ async def give_card(message: types.Message):
     selected_universe = universe_result[0]
 
     # Получаем карты
-    cursor.execute(f"SELECT card_id, name, rarity, photo_id, points FROM [{selected_universe}]")
+    cursor.execute(f"SELECT card_id, name, rarity, photo_path, points FROM [{selected_universe}]")
     cards = cursor.fetchall()
 
     if not cards:
@@ -85,7 +100,13 @@ async def give_card(message: types.Message):
 
     # Выбираем карту
     card = get_random_card(cards)
-    card_id, name, rarity, photo_id, points = card
+    card_id, name, rarity, photo_path, points = card
+
+    # Проверяем, существует ли файл изображения
+    if not os.path.isfile(photo_path):
+        await message.answer(f"Ошибка: файл изображения не найден по пути {photo_path}.")
+        conn.close()
+        return
 
     # Проверяем повторку
     cursor.execute("""
@@ -101,13 +122,11 @@ async def give_card(message: types.Message):
         conn.commit()
 
         await message.answer_photo(
-            photo=photo_id,
+            photo=FSInputFile(photo_path),  # Передаем путь к файлу
             caption=(
                 f"🎉 Вам выпала повторная карточка «*{name}*»!\n"
-                
                 f"🎲 Редкость: {rarity.capitalize()}\n"
-                f"🎖️ Очки: +{[points]} добавлено к вашему счёту.\n\n"
-                
+                f"🎖️ Очки: +{points} добавлено к вашему счёту.\n\n"
                 f"🔄 Осталось прокруток: {spins - 1 if spins > 0 else 0}"
             ),
             parse_mode="Markdown"
@@ -122,13 +141,11 @@ async def give_card(message: types.Message):
         conn.commit()
 
         await message.answer_photo(
-            photo=photo_id,
+            photo=FSInputFile(photo_path),  # Передаем путь к файлу
             caption=(
                 f"🎉 Ваша коллекция пополнилась карточкой «*{name}*»!\n\n"
-                
                 f"🎲 Редкость: {rarity.capitalize()}\n"
                 f"🎖️ Очки: {points}\n\n"
-                
                 f"🔄 Осталось прокруток: {spins - 1 if spins > 0 else 0}"
             ),
             parse_mode="Markdown"
@@ -149,7 +166,7 @@ async def give_admin_card(message: types.Message):
     cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (OWNER_ID,))
     selected_universe = cursor.fetchone()[0]
 
-    cursor.execute(f"SELECT card_id, name, rarity, photo_id, points FROM [{selected_universe}]")
+    cursor.execute(f"SELECT card_id, name, rarity, photo_path, points FROM [{selected_universe}]")
     cards = cursor.fetchall()
 
     if not cards:
@@ -158,7 +175,7 @@ async def give_admin_card(message: types.Message):
         return
 
     card = get_random_card(cards)
-    card_id, name, rarity, photo_id, points = card
+    card_id, name, rarity, photo_path, points = card
 
     cursor.execute("""
         INSERT INTO user_cards (user_id, card_id, universe, quantity)
@@ -169,7 +186,7 @@ async def give_admin_card(message: types.Message):
     conn.close()
 
     await message.answer_photo(
-        photo=photo_id,
+        photo=FSInputFile(photo_path),  # Передаем путь к файлу
         caption=(f"Карта «*{name}*» добавлена администратору."),
         parse_mode="Markdown"
     )

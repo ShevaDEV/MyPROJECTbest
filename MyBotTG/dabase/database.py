@@ -30,7 +30,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS [{universe}] (
             card_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
-            photo_id TEXT,
+            photo_path TEXT,  -- Путь к изображению
             rarity TEXT,
             attack INTEGER,
             hp INTEGER,

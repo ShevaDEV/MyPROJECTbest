@@ -1,5 +1,7 @@
 from aiogram import Router, types, F
 import sqlite3
+import os
+from aiogram.types import FSInputFile
 
 shop_callbacks_router = Router()
 
@@ -47,7 +49,7 @@ async def handle_purchase(callback: types.CallbackQuery):
         elif item_type == "rarity_guarantee":
             # Покупка гаранта на редкость
             cursor.execute(f"""
-                SELECT card_id, name, photo_id, rarity, points
+                SELECT card_id, name, photo_path, rarity, points
                 FROM [{selected_universe}]
                 WHERE rarity = ?
                 ORDER BY RANDOM()
@@ -55,7 +57,7 @@ async def handle_purchase(callback: types.CallbackQuery):
             """, (item_value,))
             card = cursor.fetchone()
             if card:
-                card_id, card_name, photo_id, rarity, points = card
+                card_id, card_name, photo_path, rarity, points = card
                 cursor.execute("""
                     INSERT INTO user_cards (user_id, card_id, universe, quantity)
                     VALUES (?, ?, ?, 1)
@@ -64,14 +66,20 @@ async def handle_purchase(callback: types.CallbackQuery):
                 cursor.execute("UPDATE users SET total_points = total_points - ? WHERE user_id = ?", (price, user_id))
                 conn.commit()
 
+                # Проверяем существование файла изображения
+                if not os.path.isfile(photo_path):
+                    await callback.answer("Ошибка: изображение карты не найдено. Обратитесь к администратору.", show_alert=True)
+                    return
+
                 # Отправляем сообщение о выпавшей карте
+                photo_file = FSInputFile(photo_path)
                 await callback.message.answer_photo(
-                    photo=photo_id,
+                    photo=photo_file,
                     caption=(
                         f"📜 Вы получили карту:\n"
                         f"🏷️ Имя: *{card_name}*\n"
                         f"🎲 Редкость: *{rarity.capitalize()}*\n"
-                        f"🎖️ Ценность: *{points} PTS*"
+                        f"🎖️ Ценность: *{points} очков*"
                     ),
                     parse_mode="Markdown"
                 )
@@ -82,13 +90,13 @@ async def handle_purchase(callback: types.CallbackQuery):
         elif item_type == "specific_card":
             # Покупка конкретной карты
             cursor.execute(f"""
-                SELECT card_id, name, photo_id, rarity, points
+                SELECT card_id, name, photo_path, rarity, points
                 FROM [{selected_universe}]
                 WHERE card_id = ?
             """, (item_value,))
             card = cursor.fetchone()
             if card:
-                card_id, card_name, photo_id, rarity, points = card
+                card_id, card_name, photo_path, rarity, points = card
                 cursor.execute("""
                     INSERT INTO user_cards (user_id, card_id, universe, quantity)
                     VALUES (?, ?, ?, 1)
@@ -97,13 +105,19 @@ async def handle_purchase(callback: types.CallbackQuery):
                 cursor.execute("UPDATE users SET total_points = total_points - ? WHERE user_id = ?", (price, user_id))
                 conn.commit()
 
+                # Проверяем существование файла изображения
+                if not os.path.isfile(photo_path):
+                    await callback.answer("Ошибка: изображение карты не найдено. Обратитесь к администратору.", show_alert=True)
+                    return
+
+                photo_file = FSInputFile(photo_path)
                 await callback.message.answer_photo(
-                    photo=photo_id,
+                    photo=photo_file,
                     caption=(
                         f"📜 Вы купили карту:\n"
                         f"🏷️ Имя: *{card_name}*\n"
                         f"🎲 Редкость: *{rarity.capitalize()}*\n"
-                        f"🎖️ Ценность: *{points} PTS*"
+                        f"🎖️ Ценность: *{points} очков*"
                     ),
                     parse_mode="Markdown"
                 )

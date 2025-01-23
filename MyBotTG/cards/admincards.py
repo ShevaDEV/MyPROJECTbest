@@ -1,9 +1,10 @@
 from aiogram import Router, types, F
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 import sqlite3
+import os
 import logging
 from config import AVAILABLE_UNIVERSES, OWNER_ID
 from handlers.cardshand.callbackcards import OwnerRarityCallback, EditCardCallback, AdminPaginationCallback
@@ -51,7 +52,7 @@ async def rarity_selected(callback: types.CallbackQuery, callback_data: OwnerRar
     with sqlite3.connect("bot_database.db") as conn:
         cursor = conn.cursor()
         cursor.execute(f"""
-        SELECT card_id, name, photo_id, rarity, attack, hp, points
+        SELECT card_id, name, photo_path, rarity, attack, hp, points
         FROM [{universe}]
         WHERE rarity = ?
         """, (rarity_type,))
@@ -66,7 +67,7 @@ async def rarity_selected(callback: types.CallbackQuery, callback_data: OwnerRar
     await state.update_data(admin_cards=cards, universe=universe)
 
     # Отправляем первую карту
-    card_id, name, photo_id, rarity, attack, hp, points = cards[0]
+    card_id, name, photo_path, rarity, attack, hp, points = cards[0]
     caption = (
         f"🆔 ID: {card_id}\n"
         f"🏷️ Имя: {name}\n"
@@ -79,8 +80,15 @@ async def rarity_selected(callback: types.CallbackQuery, callback_data: OwnerRar
         rarity=rarity_type, index=0, total=len(cards), card_id=card_id, universe=universe
     )
 
+    # Проверяем существование изображения
+    if not os.path.isfile(photo_path):
+        await callback.message.answer(f"Ошибка: изображение карты (ID: {card_id}) не найдено.")
+        await callback.answer()
+        return
+
+    photo_file = FSInputFile(photo_path)
     await callback.message.answer_photo(
-        photo=photo_id,
+        photo=photo_file,
         caption=caption,
         reply_markup=pagination_markup
     )
@@ -105,7 +113,7 @@ async def paginate_cards(callback: types.CallbackQuery, callback_data: AdminPagi
     index = index % len(cards)
 
     # Получаем данные для текущей карты
-    card_id, name, photo_id, rarity, attack, hp, points = cards[index]
+    card_id, name, photo_path, rarity, attack, hp, points = cards[index]
 
     # Формируем описание карты
     caption = (
@@ -122,9 +130,15 @@ async def paginate_cards(callback: types.CallbackQuery, callback_data: AdminPagi
         rarity=rarity_type, index=index, total=len(cards), card_id=card_id, universe=universe
     )
 
-    # Обновляем сообщение с картой
+    # Проверяем существование изображения
+    if not os.path.isfile(photo_path):
+        await callback.message.answer(f"Ошибка: изображение карты (ID: {card_id}) не найдено.")
+        await callback.answer()
+        return
+
+    photo_file = FSInputFile(photo_path)
     await callback.message.edit_media(
-        media=types.InputMediaPhoto(media=photo_id, caption=caption),
+        media=types.InputMediaPhoto(media=photo_file, caption=caption),
         reply_markup=pagination_markup
     )
 

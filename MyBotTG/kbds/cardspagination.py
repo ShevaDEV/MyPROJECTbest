@@ -1,12 +1,11 @@
 from aiogram import Router, types
-from handlers.cardshand.callbackcards import PaginationCallback, RarityCallback, ReturnCallback
+from aiogram.types import FSInputFile, InputMediaPhoto
+from handlers.cardshand.callbackcards import PaginationCallback, ReturnCallback
 from kbds.inlinecards import pagination_keyboard, rarity_keyboard_for_user
 import sqlite3
+import os
 
 cardspagination_router = Router()
-
-# Список редкостей
-rarities = ["обычная", "редкая", "эпическая", "легендарная", "мифическая"]
 
 @cardspagination_router.callback_query(PaginationCallback.filter())
 async def paginate_cards(callback: types.CallbackQuery, callback_data: PaginationCallback):
@@ -29,7 +28,7 @@ async def paginate_cards(callback: types.CallbackQuery, callback_data: Paginatio
 
     # Получаем карты выбранной редкости
     cursor.execute(f"""
-    SELECT c.card_id, c.name, c.photo_id, c.rarity, c.points
+    SELECT c.card_id, c.name, c.photo_path, c.rarity, c.points
     FROM user_cards uc
     JOIN [{selected_universe}] c ON uc.card_id = c.card_id
     WHERE uc.user_id = ? AND c.rarity = ?
@@ -46,28 +45,42 @@ async def paginate_cards(callback: types.CallbackQuery, callback_data: Paginatio
     index = index % total  # Корректируем индекс в пределах доступных карт
 
     # Получаем данные для текущей карты
-    card_id, name, photo_id, rarity, points = cards[index]
+    card_id, name, photo_path, rarity, points = cards[index]
+
+    # Проверяем существование изображения
+    if not os.path.isfile(photo_path):
+        await callback.message.edit_text(
+            f"Ошибка: файл изображения для карты '{name}' не найден.",
+            reply_markup=rarity_keyboard_for_user({}, {}, selected_universe)
+        )
+        return
 
     # Формируем описание карты
-    caption = f"Карта: *{name}*\nРедкость: *{rarity.capitalize()}*\nЦенность: *{points}* PTS"
+    caption = (
+        f"🃏 *Карта*: «*{name}*»\n"
+        f"🎲 *Редкость*: *{rarity.capitalize()}*\n"
+        f"💎 *Очки*: *{points}*"
+    )
 
     # Кнопки пагинации
     pagination_markup = pagination_keyboard(rarity=rarity, index=index, total=total, include_return=True)
 
-    # Отправляем обновленное сообщение
+    # Создаем объект InputMediaPhoto для отображения изображения
+    media = InputMediaPhoto(
+        media=FSInputFile(photo_path),
+        caption=caption,
+        parse_mode="Markdown"
+    )
+
     try:
+        # Отправляем обновленное сообщение
         await callback.message.edit_media(
-            media=types.InputMediaPhoto(
-                media=photo_id,
-                caption=caption,
-                parse_mode="Markdown"
-            ),
+            media=media,
             reply_markup=pagination_markup
         )
     except Exception as e:
         print(f"Ошибка при обновлении карты: {e}")
         await callback.answer("Произошла ошибка при переключении карт.", show_alert=True)
-
 
 
 @cardspagination_router.callback_query(ReturnCallback.filter())
@@ -85,12 +98,14 @@ async def return_to_categories(callback: types.CallbackQuery, callback_data: Ret
 
     # Получаем выбранную вселенную пользователя
     cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,))
-    selected_universe = cursor.fetchone()[0]  # Получаем вселенную пользователя
-
-    if not selected_universe:
-        await callback.answer("Вы не выбрали вселенную. Используйте команду /selectuniverse для выбора.", show_alert=True)
+    selected_universe = cursor.fetchone()
+    if not selected_universe or not selected_universe[0]:
+        await callback.message.delete()
+        await callback.message.answer("Вы не выбрали вселенную. Используйте команду /selectuniverse для выбора.")
         conn.close()
         return
+
+    selected_universe = selected_universe[0]
 
     # Считаем карты пользователя по редкостям
     cursor.execute(f"""
@@ -119,7 +134,8 @@ async def return_to_categories(callback: types.CallbackQuery, callback_data: Ret
         await callback.message.delete()  # Удаляем старое сообщение с изображением
         await callback.message.answer(  # Отправляем новое сообщение с выбором категорий
             text="Выберите категорию карт:",
-            reply_markup=keyboard
+            reply_markup=keyboard,
+            parse_mode="Markdown"
         )
     except Exception as e:
         print(f"Ошибка при возврате в категории: {e}")

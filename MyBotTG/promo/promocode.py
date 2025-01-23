@@ -3,7 +3,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from asyncio import sleep
+from asyncio import sleep, create_task
 import sqlite3
 
 promocode_router = Router()
@@ -44,7 +44,7 @@ async def handle_promocode_input(callback: types.CallbackQuery, state: FSMContex
             await state.clear()
 
     # Запускаем таймер асинхронно
-    callback.bot.create_task(timer())
+    create_task(timer())
 
 @promocode_router.message(PromoCodeState.waiting_for_promocode)
 async def process_promocode(message: types.Message, state: FSMContext):
@@ -96,5 +96,6 @@ async def process_promocode(message: types.Message, state: FSMContext):
     conn.close()
 
     # Успешное использование промокода
-    await message.answer(f"🎉 Промокод {promocode} успешно активирован! Вы получили {spins_bonus} прокруток.")
+    await message.answer(f"🎉 Промокод «*{promocode}*» успешно активирован! Вы получили {spins_bonus} прокруток.",
+                        parse_mode="Markdown")
     await state.clear()
