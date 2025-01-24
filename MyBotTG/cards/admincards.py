@@ -74,7 +74,7 @@ async def rarity_selected(callback: types.CallbackQuery, callback_data: OwnerRar
         f"🎲 Редкость: {rarity.capitalize()}\n"
         f"⚔️ Атака: {attack}\n"
         f"❤️ Здоровье: {hp}\n"
-        f"🎖️ Очки: {points}\n"
+        f"💎 Очки: {points}\n"
     )
     pagination_markup = combine_pagination_and_edit_buttons(
         rarity=rarity_type, index=0, total=len(cards), card_id=card_id, universe=universe
@@ -122,7 +122,7 @@ async def paginate_cards(callback: types.CallbackQuery, callback_data: AdminPagi
         f"🎲 Редкость: {rarity.capitalize()}\n"
         f"⚔️ Атака: {attack}\n"
         f"❤️ Здоровье: {hp}\n"
-        f"🎖️ Очки: {points}\n"
+        f"💎 Очки: {points}\n"
     )
 
     # Кнопки пагинации и редактирования
@@ -160,7 +160,7 @@ def combine_pagination_and_edit_buttons(rarity, index, total, card_id, universe)
     if total > 1:
         builder.row(
             InlineKeyboardButton(
-                text="⬅️ Назад",
+                text="⬅️",
                 callback_data=AdminPaginationCallback(rarity_type=rarity, index=(index - 1) % total).pack()
             ),
             InlineKeyboardButton(
@@ -168,7 +168,7 @@ def combine_pagination_and_edit_buttons(rarity, index, total, card_id, universe)
                 callback_data="noop"  # Неприменяемая кнопка, отображающая текущий счётчик
             ),
             InlineKeyboardButton(
-                text="Вперед ➡️",
+                text="➡️",
                 callback_data=AdminPaginationCallback(rarity_type=rarity, index=(index + 1) % total).pack()
             )
         )
@@ -176,15 +176,15 @@ def combine_pagination_and_edit_buttons(rarity, index, total, card_id, universe)
     # Добавляем кнопки редактирования
     builder.row(
         InlineKeyboardButton(
-            text="✏️ Изменить редкость",
+            text="✏️ Редкость",
             callback_data=EditCardCallback(action="edit_rarity", card_id=card_id, universe=universe).pack()
         ),
         InlineKeyboardButton(
-            text="✏️ Изменить очки",
+            text="✏️ Очки",
             callback_data=EditCardCallback(action="edit_points", card_id=card_id, universe=universe).pack()
         ),
         InlineKeyboardButton(
-            text="❌ Удалить карту",
+            text="❌ Карту",
             callback_data=EditCardCallback(action="delete", card_id=card_id, universe=universe).pack()
         )
     )

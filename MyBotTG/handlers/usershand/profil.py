@@ -10,7 +10,7 @@ def profile_keyboard() -> types.InlineKeyboardMarkup:
     """Создает инлайн-клавиатуру для профиля."""
     return types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="🎁 Промокод", callback_data="use_promocode")],
-        [types.InlineKeyboardButton(text="📋 Мои карты", callback_data="view_cards")]
+        [types.InlineKeyboardButton(text="🃏 Мои карты", callback_data="view_cards")]
     ])
 
 @profile_router.message(Command("profile"))
@@ -36,7 +36,7 @@ async def show_profile(message: types.Message):
 
     if not selected_universe:
         await message.answer(
-            "Вы не выбрали вселенную! Используйте /selectuniverse, чтобы выбрать доступную вселенную."
+            "Вы не выбрали вселенную! Используйте /select_universe, чтобы выбрать доступную вселенную."
         )
         conn.close()
         return
@@ -59,10 +59,10 @@ async def show_profile(message: types.Message):
     profile_text = (
         f"👤 Ваш профиль:\n\n"
         f"🌌 Выбранная вселенная: {selected_universe.capitalize()}\n"
-        f"🎖️ Общее количество очков: {total_points}\n"
+        f"💎 Общее количество очков: {total_points}\n"
         f"🔄 Количество прокруток: {spins}\n"
-        f"📋 Карт: {user_cards_count} из {total_universe_cards}\n\n"
-        f"Вы можете использовать 🎁 промокод или 📋 посмотреть свои карты!"
+        f"🃏 Карт: {user_cards_count} из {total_universe_cards}\n\n"
+        f"Вы можете использовать 🎁 промокод или 🃏 посмотреть свои карты!"
     )
 
     await message.answer(profile_text, reply_markup=profile_keyboard())

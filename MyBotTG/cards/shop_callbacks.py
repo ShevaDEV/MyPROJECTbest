@@ -79,7 +79,7 @@ async def handle_purchase(callback: types.CallbackQuery):
                         f"📜 Вы получили карту:\n"
                         f"🏷️ Имя: *{card_name}*\n"
                         f"🎲 Редкость: *{rarity.capitalize()}*\n"
-                        f"🎖️ Ценность: *{points} очков*"
+                        f"💎 Очки: *{points}*"
                     ),
                     parse_mode="Markdown"
                 )
@@ -117,7 +117,7 @@ async def handle_purchase(callback: types.CallbackQuery):
                         f"📜 Вы купили карту:\n"
                         f"🏷️ Имя: *{card_name}*\n"
                         f"🎲 Редкость: *{rarity.capitalize()}*\n"
-                        f"🎖️ Ценность: *{points} очков*"
+                        f"💎 Очки: *{points}*"
                     ),
                     parse_mode="Markdown"
                 )

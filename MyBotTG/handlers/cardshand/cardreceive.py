@@ -45,7 +45,7 @@ async def check_cooldown(user_id: int) -> bool:
     return False
 
 
-@cardreceive_router.message(Command("givecard"))
+@cardreceive_router.message(Command("card"))
 @cardreceive_router.message(F.text.lower() == "дай карту")
 async def give_card(message: types.Message):
     user_id = message.from_user.id
@@ -84,7 +84,7 @@ async def give_card(message: types.Message):
     cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,))
     universe_result = cursor.fetchone()
     if not universe_result or not universe_result[0]:
-        await message.answer("Вы не выбрали вселенную. Используйте /selectuniverse для выбора.")
+        await message.answer("Вы не выбрали вселенную. Используйте /select_universe для выбора.")
         conn.close()
         return
     selected_universe = universe_result[0]
@@ -126,7 +126,7 @@ async def give_card(message: types.Message):
             caption=(
                 f"🎉 Вам выпала повторная карточка «*{name}*»!\n"
                 f"🎲 Редкость: {rarity.capitalize()}\n"
-                f"🎖️ Очки: +{points} добавлено к вашему счёту.\n\n"
+                f"💎 Очки: +{points} добавлено к вашему счёту.\n\n"
                 f"🔄 Осталось прокруток: {spins - 1 if spins > 0 else 0}"
             ),
             parse_mode="Markdown"
@@ -145,7 +145,7 @@ async def give_card(message: types.Message):
             caption=(
                 f"🎉 Ваша коллекция пополнилась карточкой «*{name}*»!\n\n"
                 f"🎲 Редкость: {rarity.capitalize()}\n"
-                f"🎖️ Очки: {points}\n\n"
+                f"💎 Очки: {points}\n\n"
                 f"🔄 Осталось прокруток: {spins - 1 if spins > 0 else 0}"
             ),
             parse_mode="Markdown"

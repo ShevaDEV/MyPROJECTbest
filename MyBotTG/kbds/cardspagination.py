@@ -101,7 +101,7 @@ async def return_to_categories(callback: types.CallbackQuery, callback_data: Ret
     selected_universe = cursor.fetchone()
     if not selected_universe or not selected_universe[0]:
         await callback.message.delete()
-        await callback.message.answer("Вы не выбрали вселенную. Используйте команду /selectuniverse для выбора.")
+        await callback.message.answer("Вы не выбрали вселенную. Используйте команду /select_universe для выбора.")
         conn.close()
         return
 

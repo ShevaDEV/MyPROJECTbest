@@ -5,7 +5,7 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from config import OWNER_ID, AVAILABLE_UNIVERSES
 
 dobcards_router = Router()
@@ -35,14 +35,14 @@ class AddCardState(StatesGroup):
     waiting_for_name = State()
     waiting_for_rarity = State()
 
-# Генерация клавиатуры для выбора вселенной
-def create_universe_keyboard() -> ReplyKeyboardMarkup:
-    """Создает клавиатуру для выбора вселенной."""
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=universe.capitalize())] for universe in AVAILABLE_UNIVERSES] +
-                 [[KeyboardButton(text="Отмена")]],
-        resize_keyboard=True,
-        one_time_keyboard=True,
+# Генерация инлайн-клавиатуры для выбора вселенной
+def create_universe_inline_keyboard() -> InlineKeyboardMarkup:
+    """Создает инлайн-клавиатуру для выбора вселенной."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=universe.capitalize(), callback_data=f"universe_{universe}")]
+            for universe in AVAILABLE_UNIVERSES
+        ]
     )
 
 @dobcards_router.message(Command("addcard"))
@@ -54,28 +54,20 @@ async def add_card(message: types.Message, state: FSMContext):
 
     await message.answer(
         "Выберите вселенную для добавления карты:",
-        reply_markup=create_universe_keyboard()
+        reply_markup=create_universe_inline_keyboard()
     )
     await state.set_state(AddCardState.waiting_for_universe)
 
-@dobcards_router.message(AddCardState.waiting_for_universe)
-async def card_universe_received(message: types.Message, state: FSMContext):
-    if message.text.lower() == "отмена":
-        await message.answer("Добавление карты отменено.", reply_markup=ReplyKeyboardRemove())
-        await state.clear()
-        return
-
-    universe = message.text.lower()
+@dobcards_router.callback_query(F.data.startswith("universe_"))
+async def card_universe_received(callback: types.CallbackQuery, state: FSMContext):
+    universe = callback.data.split("_")[1]
 
     if universe not in AVAILABLE_UNIVERSES:
-        await message.answer(
-            "Пожалуйста, выберите одну из предложенных вселенных:",
-            reply_markup=create_universe_keyboard()
-        )
+        await callback.answer("Выбрана недопустимая вселенная.", show_alert=True)
         return
 
     await state.update_data(universe=universe)
-    await message.answer("Отправьте фото карты для загрузки.", reply_markup=ReplyKeyboardRemove())
+    await callback.message.edit_text("Отправьте фото карты для загрузки.")
     await state.set_state(AddCardState.waiting_for_photo)
 
 @dobcards_router.message(AddCardState.waiting_for_photo, F.photo)
@@ -95,7 +87,6 @@ async def card_photo_received(message: types.Message, state: FSMContext):
     await state.update_data(photo_path=file_path)
     await message.answer("Введите название карты.")
     await state.set_state(AddCardState.waiting_for_name)
-
 
 @dobcards_router.message(AddCardState.waiting_for_name)
 async def card_name_received(message: types.Message, state: FSMContext):
@@ -155,7 +146,6 @@ async def card_rarity_received(message: types.Message, state: FSMContext):
         f"🎲 Редкость: {rarity.capitalize()}\n"
         f"⚔️ Атака: {attack}\n"
         f"❤️ Здоровье: {hp}\n"
-        f"🎖️ Очки: {points} points",
-        reply_markup=ReplyKeyboardRemove()
+        f"🎖️ Очки: {points} points"
     )
     await state.clear()

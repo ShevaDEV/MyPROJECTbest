@@ -22,7 +22,7 @@ def create_cancel_keyboard() -> ReplyKeyboardMarkup:
         one_time_keyboard=True,
     )
 
-@admin_router.message(Command("addpromocode"))
+@admin_router.message(Command("add_promocode"))
 @admin_router.message(F.text.lower() == "добавить промокод")
 async def add_promocode_command(message: types.Message, state: FSMContext):
     """

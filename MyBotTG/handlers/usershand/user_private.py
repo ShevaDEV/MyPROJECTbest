@@ -1,8 +1,9 @@
 from aiogram import types, Router, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from handlers.cardshand.cardsall import show_user_cards
 from users.reguserinfo import register_user, get_user_info
 from kbds.admin_reply import get_main_keyboard
+from config import OWNER_ID  # ID администратора
 
 router = Router()
 
@@ -26,3 +27,35 @@ async def start_cmd(message: types.Message):
     else:
         # Если регистрация не удалась, отправляем сообщение об ошибке
         await message.answer("Произошла ошибка с регистрацией.")
+
+@router.message(F.chat.type == 'private', Command("help"))
+async def help_cmd(message: types.Message):
+    """
+    Обрабатывает команду /help и отправляет список доступных команд.
+    """
+    # Общие команды
+    help_text = (
+        "ℹ️ *Доступные команды:*\n\n"
+        "👤 *Общие команды:*\n"
+        "\\/start \\- Начать или перезапустить взаимодействие с ботом\n"
+        "\\/card \\- Получить карту\n"
+        "\\/daily \\- Получить ежедневный бонус\n"
+        "\\/cards \\- Просмотреть свои карты\n"
+        "\\/profile \\- Просмотреть свой профиль\n"
+        "\\/shop \\- Магазин\n\n"
+        "🎮 *Дополнительные команды:*\n"
+        "\\/select\\_universe \\- Выбрать вселенную\n"
+        "\\/current\\_universe \\- Глянуть выбранную вселенную\n"
+    )
+
+    # Добавляем админские команды, если пользователь — администратор
+    if message.from_user.id == OWNER_ID:
+        help_text += (
+            "\n🛠️ *Админские команды:*\n"
+            "\\/addcard \\- Добавить новую карту\n"
+            "\\/add\\_promocode \\- Просмотреть карты в базе\n"
+            "\\/view\\_cards \\- Просмотреть карты в базе\n"
+            "\\/update\\_shop \\- Обновить магазин\n"
+        )
+
+    await message.answer(help_text, parse_mode="MarkdownV2")

@@ -1,14 +1,24 @@
+import os
+import sqlite3
 from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from handlers.cardshand.callbackcards import EditCardCallback
-import sqlite3
+import random
 
 admincardedit_router = Router()
 
-# Определяем состояния для FSM
+# Диапазоны для атаки и здоровья по редкости
+RARITY_RANGES = {
+    "обычная": {"attack": (10, 30), "hp": (20, 50)},
+    "редкая": {"attack": (30, 50), "hp": (50, 80)},
+    "эпическая": {"attack": (50, 80), "hp": (80, 120)},
+    "легендарная": {"attack": (80, 120), "hp": (120, 180)},
+    "мифическая": {"attack": (120, 180), "hp": (180, 250)},
+}
+
 class EditPointsState(StatesGroup):
     waiting_for_points = State()
 
@@ -28,7 +38,6 @@ async def edit_rarity(callback: types.CallbackQuery, callback_data: EditCardCall
             )
         )
 
-    # Проверяем, есть ли текст или фотография в сообщении
     if callback.message.text:
         await callback.message.edit_text(
             text="Выберите новую редкость для карты:",
@@ -44,36 +53,41 @@ async def edit_rarity(callback: types.CallbackQuery, callback_data: EditCardCall
 
 @admincardedit_router.callback_query(lambda c: c.data.startswith("set_rarity"))
 async def set_rarity(callback: types.CallbackQuery):
-    # Разбираем данные из callback_data
     _, card_id, universe, new_rarity = callback.data.split(":")
     card_id = int(card_id)
 
-    # Обновляем редкость карты в базе данных
+    # Генерируем новые значения для атаки и здоровья на основе редкости
+    attack = random.randint(*RARITY_RANGES[new_rarity]["attack"])
+    hp = random.randint(*RARITY_RANGES[new_rarity]["hp"])
+
+    # Обновляем редкость, атаку и здоровье карты в базе данных
     with sqlite3.connect("bot_database.db") as conn:
         cursor = conn.cursor()
         cursor.execute(f"""
         UPDATE [{universe}]
-        SET rarity = ?
+        SET rarity = ?, attack = ?, hp = ?
         WHERE card_id = ?
-        """, (new_rarity, card_id))
+        """, (new_rarity, attack, hp, card_id))
         conn.commit()
 
     # Обновляем сообщение с подтверждением
     await callback.message.edit_caption(
-        caption=f"Редкость карты успешно изменена на {new_rarity.capitalize()}.",
+        caption=(
+            f"Редкость карты успешно изменена на {new_rarity.capitalize()}.\n\n"
+            f"Новые характеристики:\n"
+            f"⚔️ Атака: {attack}\n"
+            f"❤️ Здоровье: {hp}"
+        ),
         reply_markup=None
     )
-    await callback.answer("Редкость обновлена.", show_alert=True)
+    await callback.answer("Редкость и характеристики обновлены.", show_alert=True)
 
 @admincardedit_router.callback_query(EditCardCallback.filter(F.action == "edit_points"))
 async def edit_points(callback: types.CallbackQuery, callback_data: EditCardCallback, state: FSMContext):
     card_id = callback_data.card_id
     universe = callback_data.universe
 
-    # Сохраняем данные карты в FSM
     await state.update_data(card_id=card_id, universe=universe)
-
-    # Запрашиваем новое значение очков
     await callback.message.edit_caption(
         caption="Введите новое количество очков для карты:",
         reply_markup=None
@@ -93,7 +107,6 @@ async def set_points(message: types.Message, state: FSMContext):
         await message.answer("Ошибка: введите числовое значение.")
         return
 
-    # Обновляем очки карты в базе данных
     with sqlite3.connect("bot_database.db") as conn:
         cursor = conn.cursor()
         cursor.execute(f"""
@@ -111,9 +124,22 @@ async def delete_card(callback: types.CallbackQuery, callback_data: EditCardCall
     card_id = callback_data.card_id
     universe = callback_data.universe
 
-    # Удаляем карту из базы данных
     with sqlite3.connect("bot_database.db") as conn:
         cursor = conn.cursor()
+
+        # Получаем путь к изображению карты
+        cursor.execute(f"SELECT photo_path FROM [{universe}] WHERE card_id = ?", (card_id,))
+        result = cursor.fetchone()
+
+        if result:
+            photo_path = result[0]
+            if os.path.exists(photo_path):
+                try:
+                    os.remove(photo_path)
+                except Exception as e:
+                    print(f"Ошибка при удалении файла {photo_path}: {e}")
+
+        # Удаляем карту из базы данных
         cursor.execute(f"DELETE FROM [{universe}] WHERE card_id = ?", (card_id,))
         conn.commit()
 

@@ -32,7 +32,7 @@ async def paginate_admin_cards(callback: types.CallbackQuery, callback_data: Adm
         f"🎲 Редкость: {rarity.capitalize()}\n"
         f"⚔️ Атака: {attack}\n"
         f"❤️ Здоровье: {hp}\n"
-        f"🎖️ Очки: {points}\n"
+        f"💎 Очки: {points}\n"
     )
 
     # Кнопки пагинации

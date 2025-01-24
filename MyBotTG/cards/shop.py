@@ -96,7 +96,7 @@ async def show_shop(message: types.Message):
         for item in items:
             item_id, item_type, item_value, price = item
             if item_type == "spins":
-                shop_text += f"🎰 Прокрутки: {item_value} шт. — {price} очков\n"
+                shop_text += f"🔄 Прокрутки: {item_value} шт. — {price} очков\n"
                 button_text = f"Купить {item_value} прокруток"
             elif item_type == "rarity_guarantee":
                 shop_text += f"🎲 Гарант на редкость: {item_value.capitalize()} — {price} очков\n"
@@ -104,7 +104,7 @@ async def show_shop(message: types.Message):
             elif item_type == "specific_card":
                 cursor.execute(f"SELECT name FROM [{universe}] WHERE card_id = ?", (item_value,))
                 card_name = cursor.fetchone()[0]
-                shop_text += f"📜 Гарант на карту: {card_name} — {price} очков\n"
+                shop_text += f"🃏 Гарант на карту: {card_name} — {price} очков\n"
                 button_text = f"Купить {card_name}"
 
             keyboard.inline_keyboard.append([InlineKeyboardButton(text=button_text, callback_data=f"buy_{item_id}")])

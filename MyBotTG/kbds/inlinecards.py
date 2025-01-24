@@ -62,7 +62,7 @@ def pagination_keyboard(rarity, index, total, include_return=True) -> InlineKeyb
     if total > 1:
         builder.row(
             InlineKeyboardButton(
-                text="⬅️ Назад",
+                text="⬅️",
                 callback_data=PaginationCallback(rarity_type=rarity, index=(index - 1) % total).pack()
             ),
             InlineKeyboardButton(
@@ -70,7 +70,7 @@ def pagination_keyboard(rarity, index, total, include_return=True) -> InlineKeyb
                 callback_data="noop"  # Неприменяемая кнопка, отображающая текущий счётчик
             ),
             InlineKeyboardButton(
-                text="Вперед ➡️",
+                text="➡️",
                 callback_data=PaginationCallback(rarity_type=rarity, index=(index + 1) % total).pack()
             )
         )
@@ -78,7 +78,7 @@ def pagination_keyboard(rarity, index, total, include_return=True) -> InlineKeyb
     if include_return:
         builder.row(
             InlineKeyboardButton(
-                text="🔙 Вернуться",
+                text="Вернуться",
                 callback_data=ReturnCallback(action="to_categories").pack()
             )
         )
@@ -99,7 +99,7 @@ def admin_pagination_keyboard(rarity, index, total) -> InlineKeyboardMarkup:
     if total > 1:
         builder.row(
             InlineKeyboardButton(
-                text="⬅️ Назад",
+                text="⬅️",
                 callback_data=AdminPaginationCallback(rarity_type=rarity, index=(index - 1) % total).pack()
             ),
             InlineKeyboardButton(
@@ -107,7 +107,7 @@ def admin_pagination_keyboard(rarity, index, total) -> InlineKeyboardMarkup:
                 callback_data="noop"  # Неприменяемая кнопка, отображающая текущий счётчик
             ),
             InlineKeyboardButton(
-                text="Вперед ➡️",
+                text="➡️",
                 callback_data=AdminPaginationCallback(rarity_type=rarity, index=(index + 1) % total).pack()
             )
         )
@@ -127,19 +127,19 @@ def edit_card_keyboard(card_id, universe) -> InlineKeyboardMarkup:
 
     builder.row(
         InlineKeyboardButton(
-            text="✏️ Изменить редкость",
+            text="✏️ Редкость",
             callback_data=EditCardCallback(action="edit_rarity", card_id=card_id, universe=universe).pack()
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="✏️ Изменить очки",
+            text="✏️ Очки",
             callback_data=EditCardCallback(action="edit_points", card_id=card_id, universe=universe).pack()
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="❌ Удалить карту",
+            text="❌ Карту",
             callback_data=EditCardCallback(action="delete", card_id=card_id, universe=universe).pack()
         )
     )

@@ -100,7 +100,7 @@ async def show_cards_by_rarity(callback: types.CallbackQuery, callback_data: Rar
         await callback.message.edit_text(
             f"У вас нет карт редкости: {rarity.capitalize()}.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Вернуться", callback_data=ReturnCallback(action="to_categories").pack())]
+                [InlineKeyboardButton(text="Вернуться", callback_data=ReturnCallback(action="to_categories").pack())]
             ])
         )
         return
@@ -113,7 +113,7 @@ async def show_cards_by_rarity(callback: types.CallbackQuery, callback_data: Rar
         await callback.message.edit_text(
             f"Ошибка: файл изображения для карты '{name}' не найден.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Вернуться", callback_data=ReturnCallback(action="to_categories").pack())]
+                [InlineKeyboardButton(text="Вернуться", callback_data=ReturnCallback(action="to_categories").pack())]
             ])
         )
         return
