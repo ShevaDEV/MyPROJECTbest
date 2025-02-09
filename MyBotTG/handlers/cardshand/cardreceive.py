@@ -110,8 +110,9 @@ async def give_card(message: types.Message):
 
     # Проверяем повторку
     cursor.execute("""
-        SELECT quantity FROM user_cards WHERE user_id = ? AND card_id = ? AND universe = ?
+    SELECT quantity FROM user_cards WHERE user_id = ? AND card_id = ? AND universe_id = ?
     """, (user_id, card_id, selected_universe))
+
     result = cursor.fetchone()
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -133,9 +134,10 @@ async def give_card(message: types.Message):
         )
     else:
         cursor.execute("""
-            INSERT INTO user_cards (user_id, card_id, universe, quantity)
-            VALUES (?, ?, ?, 1)
+        INSERT INTO user_cards (user_id, card_id, universe_id, quantity)
+        VALUES (?, ?, ?, 1)
         """, (user_id, card_id, selected_universe))
+
         cursor.execute("UPDATE users SET total_points = total_points + ? WHERE user_id = ?", (points, user_id))
         cursor.execute("UPDATE users SET last_card_time = ? WHERE user_id = ?", (now, user_id))
         conn.commit()

@@ -22,7 +22,7 @@ async def handle_purchase(callback: types.CallbackQuery):
 
         total_points, selected_universe = user_data
         if not selected_universe:
-            await callback.answer("Вы не выбрали вселенную. Используйте /selectuniverse для выбора.", show_alert=True)
+            await callback.answer("Вы не выбрали вселенную. Используйте /select_universe для выбора.", show_alert=True)
             return
 
         # Получаем информацию о товаре

@@ -3,14 +3,15 @@ from aiogram.filters import Command
 import sqlite3
 from kbds.inlinecards import rarity_keyboard_for_user
 from promo.promocode import promocode_keyboard  # Инлайн-клавиатура для промокодов
-
+from handlers.usershand.change_universe import start_universe_change
 profile_router = Router()
 
 def profile_keyboard() -> types.InlineKeyboardMarkup:
     """Создает инлайн-клавиатуру для профиля."""
     return types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="🎁 Промокод", callback_data="use_promocode")],
-        [types.InlineKeyboardButton(text="🃏 Мои карты", callback_data="view_cards")]
+        [types.InlineKeyboardButton(text="🃏 Мои карты", callback_data="view_cards")],
+        [types.InlineKeyboardButton(text="🌌 Сменить вселенную", callback_data="change_universe")]
     ])
 
 @profile_router.message(Command("profile"))

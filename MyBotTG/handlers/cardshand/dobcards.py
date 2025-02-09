@@ -5,8 +5,8 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
-from config import OWNER_ID, AVAILABLE_UNIVERSES
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from config import OWNER_ID  # Убедитесь, что OWNER_ID задан правильно
 
 dobcards_router = Router()
 
@@ -35,15 +35,32 @@ class AddCardState(StatesGroup):
     waiting_for_name = State()
     waiting_for_rarity = State()
 
-# Генерация инлайн-клавиатуры для выбора вселенной
+def get_available_universes() -> list:
+    """
+    Получает список вселенных из базы данных.
+    Каждая вселенная представлена кортежем (universe_id, name).
+    Выбираются только те, у которых enabled = 1.
+    """
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT universe_id, name FROM universes WHERE enabled = 1")
+    universes = cursor.fetchall()
+    conn.close()
+    return universes
+
 def create_universe_inline_keyboard() -> InlineKeyboardMarkup:
-    """Создает инлайн-клавиатуру для выбора вселенной."""
-    return InlineKeyboardMarkup(
+    """
+    Создает инлайн-клавиатуру для выбора вселенной.
+    Каждая кнопка: текст — name (капитализированное), callback_data — "universe_<universe_id>".
+    """
+    universes = get_available_universes()
+    keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=universe.capitalize(), callback_data=f"universe_{universe}")]
-            for universe in AVAILABLE_UNIVERSES
+            [InlineKeyboardButton(text=name.capitalize(), callback_data=f"universe_{universe_id}")]
+            for universe_id, name in universes
         ]
     )
+    return keyboard
 
 @dobcards_router.message(Command("addcard"))
 @dobcards_router.message(F.text.lower() == "добавить карту")
@@ -52,37 +69,47 @@ async def add_card(message: types.Message, state: FSMContext):
         await message.answer("У вас нет прав на использование этой команды.")
         return
 
+    kb = create_universe_inline_keyboard()
+    if not kb.inline_keyboard:
+        await message.answer("Список вселенных пуст или ошибка в базе данных.")
+        return
+
     await message.answer(
         "Выберите вселенную для добавления карты:",
-        reply_markup=create_universe_inline_keyboard()
+        reply_markup=kb
     )
     await state.set_state(AddCardState.waiting_for_universe)
 
 @dobcards_router.callback_query(F.data.startswith("universe_"))
 async def card_universe_received(callback: types.CallbackQuery, state: FSMContext):
-    universe = callback.data.split("_")[1]
-
-    if universe not in AVAILABLE_UNIVERSES:
+    # Извлекаем идентификатор вселенной (всё, что после "universe_")
+    universe = callback.data.split("_", 1)[1]
+    available_universes = [u[0] for u in get_available_universes()]
+    if universe not in available_universes:
         await callback.answer("Выбрана недопустимая вселенная.", show_alert=True)
         return
 
     await state.update_data(universe=universe)
     await callback.message.edit_text("Отправьте фото карты для загрузки.")
     await state.set_state(AddCardState.waiting_for_photo)
+    await callback.answer()
 
 @dobcards_router.message(AddCardState.waiting_for_photo, F.photo)
 async def card_photo_received(message: types.Message, state: FSMContext):
-    universe = (await state.get_data())["universe"]
+    data = await state.get_data()
+    universe = data.get("universe")
     photo = message.photo[-1]
 
-    # Сохраняем изображение в локальную папку
     folder_path = f"images/{universe}"
-    os.makedirs(folder_path, exist_ok=True)  # Создаем папку, если она не существует
+    os.makedirs(folder_path, exist_ok=True)
     file_path = f"{folder_path}/{photo.file_unique_id}.jpg"
 
-    # Получаем файл и загружаем его
-    file = await message.bot.get_file(photo.file_id)
-    await message.bot.download_file(file.file_path, destination=file_path)
+    try:
+        file = await message.bot.get_file(photo.file_id)
+        await message.bot.download_file(file.file_path, destination=file_path)
+    except Exception:
+        await message.answer("Ошибка при загрузке фото. Попробуйте еще раз.")
+        return
 
     await state.update_data(photo_path=file_path)
     await message.answer("Введите название карты.")
@@ -90,55 +117,53 @@ async def card_photo_received(message: types.Message, state: FSMContext):
 
 @dobcards_router.message(AddCardState.waiting_for_name)
 async def card_name_received(message: types.Message, state: FSMContext):
-    name = message.text
+    name = message.text.strip()
     await state.update_data(name=name)
-
     await message.answer(
         "Введите редкость карты. Допустимые значения:\n"
-        "обычная, редкая, эпическая, легендарная, мифическая.",
-        parse_mode="Markdown"
+        "обычная, редкая, эпическая, легендарная, мифическая."
     )
     await state.set_state(AddCardState.waiting_for_rarity)
 
 @dobcards_router.message(AddCardState.waiting_for_rarity)
 async def card_rarity_received(message: types.Message, state: FSMContext):
-    rarity = message.text.lower()
-
+    rarity = message.text.lower().strip()
     if rarity not in RARITY_RANGES:
         await message.answer("Пожалуйста, выберите одну из предложенных редкостей.")
         return
 
-    # Получаем данные из состояния
     card_data = await state.get_data()
-    photo_path = card_data["photo_path"]
-    name = card_data["name"]
-    universe = card_data["universe"]
+    photo_path = card_data.get("photo_path")
+    name = card_data.get("name")
+    universe = card_data.get("universe")
 
-    # Проверяем существование карты
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT 1 FROM {universe} WHERE name = ?", (name,))
-    if cursor.fetchone():
-        await message.answer(f"Карта с именем '{name}' уже существует в вселенной '{universe.capitalize()}'.")
+    try:
+        conn = sqlite3.connect("bot_database.db")
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT 1 FROM {universe} WHERE name = ?", (name,))
+        if cursor.fetchone():
+            await message.answer(
+                f"Карта с именем '{name}' уже существует в вселенной '{universe.capitalize()}'."
+            )
+            conn.close()
+            await state.clear()
+            return
+
+        attack = random.randint(*RARITY_RANGES[rarity]["attack"])
+        hp = random.randint(*RARITY_RANGES[rarity]["hp"])
+        points_range = range(RARITY_POINTS[rarity][0], RARITY_POINTS[rarity][1] + 1, 50)
+        points = random.choice(points_range)
+
+        cursor.execute(f"""
+            INSERT INTO {universe} (name, photo_path, rarity, attack, hp, points)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (name, photo_path, rarity, attack, hp, points))
+        conn.commit()
         conn.close()
+    except Exception:
+        await message.answer("Ошибка при сохранении карты в базу данных.")
         await state.clear()
         return
-
-    # Генерация характеристик карты
-    attack = random.randint(*RARITY_RANGES[rarity]["attack"])
-    hp = random.randint(*RARITY_RANGES[rarity]["hp"])
-
-    # Генерация поинтов с окончанием 00 или 50
-    points_range = range(RARITY_POINTS[rarity][0], RARITY_POINTS[rarity][1] + 1, 50)
-    points = random.choice(points_range)
-
-    # Сохраняем карту в базу данных
-    cursor.execute(f"""
-    INSERT INTO {universe} (name, photo_path, rarity, attack, hp, points)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """, (name, photo_path, rarity, attack, hp, points))
-    conn.commit()
-    conn.close()
 
     await message.answer(
         f"Карта '{name}' успешно добавлена в таблицу '{universe.capitalize()}'!\n\n"

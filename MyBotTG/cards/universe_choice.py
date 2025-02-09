@@ -84,16 +84,3 @@ async def universe_chosen(message: types.Message):
     )
 
 
-# Команда для проверки текущей вселенной
-@universechoice_router.message(Command("current_universe"))
-@universechoice_router.message(F.text.lower() == "моя вселенная")
-async def current_universe(message: types.Message):
-    user_id = message.from_user.id
-
-    # Получаем текущую вселенную пользователя
-    current_universe = await get_user_universe(user_id)
-
-    if current_universe:
-        await message.answer(f"Ваша текущая вселенная: {current_universe.capitalize()}.")
-    else:
-        await message.answer("Вы еще не выбрали вселенную. Используйте команду /select_universe для выбора.")

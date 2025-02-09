@@ -1,5 +1,4 @@
 from aiogram import Router, types
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command
 from datetime import datetime, timedelta
 import sqlite3
@@ -66,56 +65,23 @@ async def give_daily_bonus(user_id: int) -> tuple[bool, int, int]:
         logging.error(f"Ошибка при выдаче ежедневного бонуса: {e}")
         return False, 0, 0
 
-# Генерация клавиатуры
-def create_daily_reward_keyboard(enable_button: bool) -> InlineKeyboardMarkup:
-    """Создает клавиатуру для ежедневного бонуса."""
-    if enable_button:
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🎁 Получить бонус", callback_data="get_daily_bonus")]
-            ]
-        )
-    return InlineKeyboardMarkup(inline_keyboard=[])
-
-# Обработка бонуса
-async def process_daily_bonus(user_id: int) -> tuple[str, InlineKeyboardMarkup, bool]:
-    """
-    Обрабатывает выдачу ежедневного бонуса.
-    :param user_id: ID пользователя
-    :return: Сообщение, клавиатура, флаг успеха
-    """
+# Хендлер команды /daily
+@dailyreward_router.message(Command("daily"))
+async def daily_reward(message: types.Message):
+    user_id = message.from_user.id
     success, streak, spins = await give_daily_bonus(user_id)
 
     if success:
-        message = (
+        reward_message = (
             f"🎁 *Вы получили свой ежедневный бонус!*\n\n"
-            f"🌟 Стрик: *{streak}* день(ей)\n"
+            f"🌟 Стрик: *{streak}* день(ей).\n"
             f"🔄 Вы получили: *{spins}* прокруток."
         )
     else:
-        message = (
+        reward_message = (
             f"⏳ *Вы уже получили бонус сегодня.*\n\n"
             f"🌟 Стрик: *{streak}* день(ей).\n"
             f"Попробуйте снова через 24 часа."
         )
 
-    return message, create_daily_reward_keyboard(enable_button=success), success
-
-# Хендлер команды /daily
-@dailyreward_router.message(Command("daily"))
-async def daily_reward(message: types.Message):
-    user_id = message.from_user.id
-    reward_message, keyboard, _ = await process_daily_bonus(user_id)
-    await message.answer(reward_message, reply_markup=keyboard, parse_mode="Markdown")
-
-# Хендлер инлайн-кнопки
-@dailyreward_router.callback_query(lambda cb: cb.data == "get_daily_bonus")
-async def handle_get_daily_bonus(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    reward_message, keyboard, success = await process_daily_bonus(user_id)
-
-    try:
-        await callback_query.message.edit_text(reward_message, reply_markup=keyboard, parse_mode="Markdown")
-    except Exception as e:
-        logging.error(f"Ошибка при обновлении сообщения: {e}")
-    await callback_query.answer("Бонус обработан!" if success else "Бонус уже получен.")
+    await message.answer(reward_message, parse_mode="Markdown")
