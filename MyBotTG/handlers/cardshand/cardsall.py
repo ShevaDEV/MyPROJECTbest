@@ -8,6 +8,13 @@ import os
 
 cardsall_router = Router()
 
+def escape_markdown(text: str) -> str:
+    """Экранирует специальные символы в Markdown."""
+    special_chars = "_*[]()~`>#+-=|{}.!\\"
+    for char in special_chars:
+        text = text.replace(char, f"\\{char}")
+    return text
+
 @cardsall_router.message(Command("cards"))
 @cardsall_router.message(F.text.lower() == "мои карты")
 @cardsall_router.callback_query(lambda c: c.data == "view_cards")
@@ -17,7 +24,6 @@ async def show_user_cards(event: types.Message | types.CallbackQuery):
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
 
-    # Получаем выбранную вселенную пользователя
     cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,))
     selected_universe = cursor.fetchone()
 
@@ -28,40 +34,42 @@ async def show_user_cards(event: types.Message | types.CallbackQuery):
         conn.close()
         return
 
-    selected_universe = selected_universe[0]
+    cursor.execute("SELECT name FROM universes WHERE universe_id = ?", (selected_universe[0],))
+    universe_name = cursor.fetchone()
+    if not universe_name:
+        await event.reply("Ошибка: Вселенная не найдена в базе данных.")
+        conn.close()
+        return
 
-    # Считаем карты пользователя по редкостям
+    universe_name = universe_name[0]  # Используем правильное название
+
     cursor.execute(f"""
     SELECT c.rarity, COUNT(uc.card_id)
     FROM user_cards uc
-    JOIN [{selected_universe}] c ON uc.card_id = c.card_id
+    JOIN [{selected_universe[0]}] c ON uc.card_id = c.card_id
     WHERE uc.user_id = ?
     GROUP BY c.rarity
     """, (user_id,))
     user_cards = {row[0]: row[1] for row in cursor.fetchall()}
 
-    # Считаем общее количество карт в базе по редкостям
     cursor.execute(f"""
     SELECT rarity, COUNT(card_id)
-    FROM [{selected_universe}]
+    FROM [{selected_universe[0]}]
     GROUP BY rarity
     """)
     total_cards = {row[0]: row[1] for row in cursor.fetchall()}
 
     conn.close()
 
-    # Если карт у пользователя нет
     if not user_cards:
         await (event.answer if isinstance(event, types.CallbackQuery) else event.reply)(
-            f"В выбранной вселенной '{selected_universe.capitalize()}' у вас пока нет карт."
+            f"В выбранной вселенной '{escape_markdown(universe_name)}' у вас пока нет карт.",
+            parse_mode="Markdown"
         )
         return
 
-    # Формируем клавиатуру с кнопками редкостей
-    keyboard = rarity_keyboard_for_user(user_cards=user_cards, total_cards=total_cards, universe=selected_universe)
-
-    # Формируем сообщение с указанием вселенной
-    message_text = f"Какие карты из вселенной {selected_universe.capitalize()} хотите посмотреть?"
+    keyboard = rarity_keyboard_for_user(user_cards=user_cards, total_cards=total_cards, universe=selected_universe[0])
+    message_text = f"Какие карты из вселенной {escape_markdown(universe_name)} хотите посмотреть?"
 
     if isinstance(event, types.CallbackQuery):
         await event.message.edit_text(message_text, reply_markup=keyboard, parse_mode="Markdown")
@@ -75,7 +83,6 @@ async def show_cards_by_rarity(callback: types.CallbackQuery, callback_data: Rar
     rarity = callback_data.rarity_type
     universe = callback_data.universe
 
-    # Проверка валидности редкости
     valid_rarities = ["обычная", "редкая", "эпическая", "легендарная", "мифическая"]
     if rarity not in valid_rarities:
         await callback.answer("Неверный тип редкости.", show_alert=True)
@@ -84,7 +91,6 @@ async def show_cards_by_rarity(callback: types.CallbackQuery, callback_data: Rar
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
 
-    # Получаем карты указанной редкости для выбранной вселенной
     cursor.execute(f"""
     SELECT c.card_id, c.name, c.photo_path, c.rarity, c.points
     FROM user_cards uc
@@ -96,46 +102,40 @@ async def show_cards_by_rarity(callback: types.CallbackQuery, callback_data: Rar
     conn.close()
 
     if not cards:
-        # Если карт нет, отображаем сообщение с кнопкой "Вернуться"
         await callback.message.edit_text(
-            f"У вас нет карт редкости: {rarity.capitalize()}.",
+            f"У вас нет карт редкости: {escape_markdown(rarity.capitalize())}.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="Вернуться", callback_data=ReturnCallback(action="to_categories").pack())]
-            ])
+            ]),
+            parse_mode="Markdown"
         )
         return
 
-    # Если карты есть, отправляем данные первой карты
     card_id, name, photo_path, rarity, points = cards[0]
 
-    # Проверяем существование изображения
     if not os.path.isfile(photo_path):
         await callback.message.edit_text(
-            f"Ошибка: файл изображения для карты '{name}' не найден.",
+            f"Ошибка: файл изображения для карты '{escape_markdown(name)}' не найден.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="Вернуться", callback_data=ReturnCallback(action="to_categories").pack())]
-            ])
+            ]),
+            parse_mode="Markdown"
         )
         return
 
-    # Создаем сообщение о карте
     media = InputMediaPhoto(
         media=FSInputFile(photo_path),
-    caption = (
-        f"🃏 *Карта*: «*{name}*»\n"
-        f"🎲 *Редкость*: *{rarity.capitalize()}*\n"
-        f"💎 *Очки*: *{points}*"
-    ),
+        caption=(
+            f"🃏 *Карта*: *{escape_markdown(name)}*\n"
+            f"🎲 *Редкость*: *{escape_markdown(rarity.capitalize())}*\n"
+            f"💎 *Очки*: *{points}*"
+        ),
         parse_mode="Markdown"
     )
 
-    # Создаем клавиатуру для пагинации
     reply_markup = pagination_keyboard(rarity=rarity, index=0, total=len(cards), include_return=True)
 
-    await callback.message.edit_media(
-        media=media,
-        reply_markup=reply_markup
-    )
+    await callback.message.edit_media(media=media, reply_markup=reply_markup)
 
 
 @cardsall_router.callback_query(ReturnCallback.filter(F.action == "to_categories"))
@@ -145,7 +145,6 @@ async def return_to_categories(callback: types.CallbackQuery):
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
 
-    # Получаем выбранную вселенную пользователя
     cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,))
     selected_universe = cursor.fetchone()
 
@@ -157,7 +156,6 @@ async def return_to_categories(callback: types.CallbackQuery):
 
     selected_universe = selected_universe[0]
 
-    # Считаем карты пользователя по редкостям
     cursor.execute(f"""
     SELECT c.rarity, COUNT(uc.card_id)
     FROM user_cards uc
@@ -167,7 +165,6 @@ async def return_to_categories(callback: types.CallbackQuery):
     """, (user_id,))
     user_cards = {row[0]: row[1] for row in cursor.fetchall()}
 
-    # Считаем общее количество карт в базе по редкостям
     cursor.execute(f"""
     SELECT rarity, COUNT(card_id)
     FROM [{selected_universe}]
@@ -177,12 +174,16 @@ async def return_to_categories(callback: types.CallbackQuery):
 
     conn.close()
 
-    # Формируем клавиатуру с кнопками редкостей
+    cursor.execute("SELECT name FROM universes WHERE universe_id = ?", (selected_universe,))
+    universe_name = cursor.fetchone()
+    if not universe_name:
+        await callback.message.answer("Ошибка: Вселенная не найдена в базе данных.")
+        return
+
+    universe_name = universe_name[0]
+
     keyboard = rarity_keyboard_for_user(user_cards=user_cards, total_cards=total_cards, universe=selected_universe)
+    message_text = f"Какие карты из вселенной {escape_markdown(universe_name)} хотите посмотреть?"
 
-    # Формируем сообщение с указанием вселенной
-    message_text = f"Какие карты из вселенной {selected_universe.capitalize()} хотите посмотреть?"
-
-    # Удаляем сообщение с карточкой и отправляем новое
     await callback.message.delete()
     await callback.message.answer(message_text, reply_markup=keyboard, parse_mode="Markdown")

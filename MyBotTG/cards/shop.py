@@ -70,6 +70,7 @@ def _sync_update_all_shops():
         conn.commit()
 
 @shop_router.message(Command("shop"))
+@shop_router.message(F.text.lower() == "магазин")
 async def show_shop(message: types.Message):
     print(f"Получен запрос в /shop от {message.from_user.id}")
     user_id = message.from_user.id

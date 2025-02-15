@@ -2,11 +2,12 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
-from config import AVAILABLE_UNIVERSES
-
 import sqlite3
 
+AVAILABLE_UNIVERSES = ["marvel", "star_wars", "dc"]
+
 universechoice_router = Router()
+
 
 async def get_user_universe(user_id: int) -> str:
     """Получаем выбранную вселенную пользователя из базы данных."""
@@ -26,7 +27,9 @@ async def set_user_universe(user_id: int, universe: str):
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
 
-    cursor.execute("UPDATE users SET selected_universe = ? WHERE user_id = ?", (universe, user_id))
+    cursor.execute(
+        "UPDATE users SET selected_universe = ? WHERE user_id = ?", (universe, user_id)
+    )
     conn.commit()
     conn.close()
 
@@ -42,26 +45,28 @@ async def select_universe(message: types.Message):
     if current_universe:
         await message.answer(
             f"Вы уже выбрали вселенную {current_universe.capitalize()}.",
-            reply_markup=ReplyKeyboardRemove()  # Убираем реплай-кнопки, если были
+            reply_markup=ReplyKeyboardRemove(),  # Убираем реплай-кнопки, если были
         )
         return
 
     # Генерируем кнопки
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=universe.capitalize())] for universe in AVAILABLE_UNIVERSES
+            [KeyboardButton(text=universe.capitalize())]
+            for universe in AVAILABLE_UNIVERSES
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
     )
 
     await message.answer(
-        "Выберите вселенную, чтобы получать карты:",
-        reply_markup=keyboard
+        "Выберите вселенную, чтобы получать карты:", reply_markup=keyboard
     )
 
 
 # Обработчик выбора вселенной
-@universechoice_router.message(F.text.lower().in_([u.lower() for u in AVAILABLE_UNIVERSES]))
+@universechoice_router.message(
+    F.text.lower().in_([u.lower() for u in AVAILABLE_UNIVERSES])
+)
 async def universe_chosen(message: types.Message):
     user_id = message.from_user.id
     chosen_universe = message.text.lower()
@@ -71,7 +76,7 @@ async def universe_chosen(message: types.Message):
     if current_universe == chosen_universe:
         await message.answer(
             f"Вы уже выбрали вселенную {chosen_universe.capitalize()}.",
-            reply_markup=ReplyKeyboardRemove()  # Убираем реплай-кнопки
+            reply_markup=ReplyKeyboardRemove(),  # Убираем реплай-кнопки
         )
         return
 
@@ -80,7 +85,5 @@ async def universe_chosen(message: types.Message):
 
     await message.answer(
         f"Вы успешно выбрали вселенную {chosen_universe.capitalize()}.",
-        reply_markup=ReplyKeyboardRemove()  # Убираем реплай-кнопки
+        reply_markup=ReplyKeyboardRemove(),  # Убираем реплай-кнопки
     )
-
-

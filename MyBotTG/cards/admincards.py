@@ -6,9 +6,11 @@ from aiogram.fsm.context import FSMContext
 import sqlite3
 import os
 import logging
-from config import AVAILABLE_UNIVERSES, OWNER_ID
+from config import OWNER_ID
 from handlers.cardshand.callbackcards import OwnerRarityCallback, EditCardCallback, AdminPaginationCallback
 from kbds.inlinecards import rarity_keyboard_for_owner, admin_pagination_keyboard
+
+AVAILABLE_UNIVERSES = ["marvel", "star_wars", "dc"]
 
 admincards_router = Router()
 
