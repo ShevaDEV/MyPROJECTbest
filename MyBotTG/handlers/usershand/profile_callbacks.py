@@ -5,6 +5,7 @@ from promo.promocode import handle_promocode_input
 from aiogram.fsm.context import FSMContext
 from handlers.usershand.change_universe import start_universe_change
 from handlers.usershand.profil import show_profile
+from handlers.usershand.referal import show_referral_info
 
 profile_callbacks_router = Router()
 
@@ -26,24 +27,28 @@ async def process_change_universe(callback: types.CallbackQuery, state: FSMConte
 
 @profile_callbacks_router.callback_query(lambda c: c.data == "cancel_universe_selection")
 async def cancel_universe_selection(callback: types.CallbackQuery, state: FSMContext):
-    """Обрабатывает отмену выбора вселенной и возвращает профиль пользователя."""
-    
+    """Отмена выбора вселенной и возвращаем в профиль пользователя."""
     user_id = callback.from_user.id
 
-    # Проверяем, есть ли профиль пользователя в БД
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
-    user_exists = cursor.fetchone()
-    conn.close()
-
-    await callback.message.delete()  # Удаляем сообщение с выбором вселенной
+    # Удаляем сообщение с выбором вселенной
+    await callback.message.delete()  
     await callback.answer("🔙 Возвращаюсь в профиль...")
 
-    if user_exists:
-        # Отправляем новый профиль пользователю
-        await show_profile(callback.message.chat.id)
-    else:
-        await callback.message.answer("⚠️ Ошибка: профиль не найден. Попробуйте снова или зарегистрируйтесь с помощью /start.")
+    # Отправляем профиль пользователя
+    await show_profile(callback)
 
     await state.clear()  # Очищаем состояние FSM
+
+
+@profile_callbacks_router.callback_query(lambda c: c.data == "view_referrals")
+async def view_referrals_from_profile(callback: types.CallbackQuery):
+    """Обработчик кнопки 'Рефералы' в профиле."""
+    await callback.message.delete()  # Удаляем сообщение профиля
+    await show_referral_info(callback.message)  # Показываем реферальную систему
+
+
+@profile_callbacks_router.callback_query(lambda c: c.data == "back_to_profile")
+async def back_to_profile(callback: types.CallbackQuery):
+    """Обработчик кнопки 'Назад в профиль'."""
+    await callback.message.delete()  # Удаляем реферальное сообщение
+    await show_profile(callback)  # Передаем callback.message в show_profile

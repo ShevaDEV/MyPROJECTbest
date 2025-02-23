@@ -59,9 +59,9 @@ async def handle_purchase(callback: types.CallbackQuery):
             if card:
                 card_id, card_name, photo_path, rarity, points = card
                 cursor.execute("""
-                    INSERT INTO user_cards (user_id, card_id, universe, quantity)
+                    INSERT INTO user_cards (user_id, card_id, universe_id, quantity)
                     VALUES (?, ?, ?, 1)
-                    ON CONFLICT(user_id, card_id, universe) DO UPDATE SET quantity = quantity + 1
+                    ON CONFLICT(user_id, card_id, universe_id) DO UPDATE SET quantity = quantity + 1
                 """, (user_id, card_id, selected_universe))
                 cursor.execute("UPDATE users SET total_points = total_points - ? WHERE user_id = ?", (price, user_id))
                 conn.commit()
@@ -98,9 +98,9 @@ async def handle_purchase(callback: types.CallbackQuery):
             if card:
                 card_id, card_name, photo_path, rarity, points = card
                 cursor.execute("""
-                    INSERT INTO user_cards (user_id, card_id, universe, quantity)
+                    INSERT INTO user_cards (user_id, card_id, universe_id, quantity)
                     VALUES (?, ?, ?, 1)
-                    ON CONFLICT(user_id, card_id, universe) DO UPDATE SET quantity = quantity + 1
+                    ON CONFLICT(user_id, card_id, universe_id) DO UPDATE SET quantity = quantity + 1
                 """, (user_id, card_id, selected_universe))
                 cursor.execute("UPDATE users SET total_points = total_points - ? WHERE user_id = ?", (price, user_id))
                 conn.commit()

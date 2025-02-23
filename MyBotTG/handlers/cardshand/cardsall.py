@@ -29,7 +29,7 @@ async def show_user_cards(event: types.Message | types.CallbackQuery):
 
     if not selected_universe or not selected_universe[0]:
         await (event.answer if isinstance(event, types.CallbackQuery) else event.reply)(
-            "Вы не выбрали вселенную. Используйте команду /selectuniverse для выбора."
+            "Вы не выбрали вселенную. Используйте команду /select_universe для выбора."
         )
         conn.close()
         return
@@ -142,48 +142,47 @@ async def show_cards_by_rarity(callback: types.CallbackQuery, callback_data: Rar
 async def return_to_categories(callback: types.CallbackQuery):
     user_id = callback.from_user.id
 
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
+    # Используем конструкцию with для автоматического закрытия соединения
+    with sqlite3.connect("bot_database.db") as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,))
-    selected_universe = cursor.fetchone()
+        cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,))
+        selected_universe = cursor.fetchone()
 
-    if not selected_universe or not selected_universe[0]:
+        if not selected_universe or not selected_universe[0]:
+            await callback.message.delete()
+            await callback.message.answer("Вы не выбрали вселенную!")
+            return
+
+        selected_universe = selected_universe[0]
+
+        cursor.execute(f"""
+        SELECT c.rarity, COUNT(uc.card_id)
+        FROM user_cards uc
+        JOIN [{selected_universe}] c ON uc.card_id = c.card_id
+        WHERE uc.user_id = ?
+        GROUP BY c.rarity
+        """, (user_id,))
+        user_cards = {row[0]: row[1] for row in cursor.fetchall()}
+
+        cursor.execute(f"""
+        SELECT rarity, COUNT(card_id)
+        FROM [{selected_universe}]
+        GROUP BY rarity
+        """)
+        total_cards = {row[0]: row[1] for row in cursor.fetchall()}
+
+        cursor.execute("SELECT name FROM universes WHERE universe_id = ?", (selected_universe,))
+        universe_name = cursor.fetchone()
+        if not universe_name:
+            await callback.message.answer("Ошибка: Вселенная не найдена в базе данных.")
+            return
+
+        universe_name = universe_name[0]
+
+        keyboard = rarity_keyboard_for_user(user_cards=user_cards, total_cards=total_cards, universe=selected_universe)
+        message_text = f"Какие карты из вселенной {escape_markdown(universe_name)} хотите посмотреть?"
+
         await callback.message.delete()
-        await callback.message.answer("Вы не выбрали вселенную!")
-        conn.close()
-        return
+        await callback.message.answer(message_text, reply_markup=keyboard, parse_mode="Markdown")
 
-    selected_universe = selected_universe[0]
-
-    cursor.execute(f"""
-    SELECT c.rarity, COUNT(uc.card_id)
-    FROM user_cards uc
-    JOIN [{selected_universe}] c ON uc.card_id = c.card_id
-    WHERE uc.user_id = ?
-    GROUP BY c.rarity
-    """, (user_id,))
-    user_cards = {row[0]: row[1] for row in cursor.fetchall()}
-
-    cursor.execute(f"""
-    SELECT rarity, COUNT(card_id)
-    FROM [{selected_universe}]
-    GROUP BY rarity
-    """)
-    total_cards = {row[0]: row[1] for row in cursor.fetchall()}
-
-    conn.close()
-
-    cursor.execute("SELECT name FROM universes WHERE universe_id = ?", (selected_universe,))
-    universe_name = cursor.fetchone()
-    if not universe_name:
-        await callback.message.answer("Ошибка: Вселенная не найдена в базе данных.")
-        return
-
-    universe_name = universe_name[0]
-
-    keyboard = rarity_keyboard_for_user(user_cards=user_cards, total_cards=total_cards, universe=selected_universe)
-    message_text = f"Какие карты из вселенной {escape_markdown(universe_name)} хотите посмотреть?"
-
-    await callback.message.delete()
-    await callback.message.answer(message_text, reply_markup=keyboard, parse_mode="Markdown")

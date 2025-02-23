@@ -11,19 +11,26 @@ def profile_keyboard() -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="🎁 Промокод", callback_data="use_promocode")],
         [types.InlineKeyboardButton(text="🃏 Мои карты", callback_data="view_cards")],
-        [types.InlineKeyboardButton(text="🌌 Сменить вселенную", callback_data="change_universe")]
+        [types.InlineKeyboardButton(text="🌌 Сменить вселенную", callback_data="change_universe")],
+        [types.InlineKeyboardButton(text="🎟️ Рефералы", callback_data="view_referrals")]
     ])
 
 @profile_router.message(Command("profile"))
 @profile_router.message(F.text.lower() == "профиль")
-async def show_profile(message: types.Message):
+async def show_profile(event: types.Message | types.CallbackQuery):
     """Команда для отображения профиля пользователя."""
-    user_id = message.from_user.id
-
+    
+    # Определяем user_id в зависимости от типа объекта
+    if isinstance(event, types.CallbackQuery):
+        user_id = event.from_user.id  # Берём ID пользователя из callback
+        message = event.message  # Сообщение, к которому был callback
+    else:
+        user_id = event.from_user.id  # Берём ID пользователя из сообщения
+        message = event  # Обычное текстовое сообщение
+    
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
 
-    # Запрос данных пользователя
     cursor.execute("SELECT total_points, spins, selected_universe FROM users WHERE user_id = ?", (user_id,))
     user_data = cursor.fetchone()
 
@@ -42,21 +49,14 @@ async def show_profile(message: types.Message):
         conn.close()
         return
 
-    # Подсчитываем количество уникальных карт у пользователя
-    cursor.execute("""
-        SELECT COUNT(DISTINCT card_id)
-        FROM user_cards
-        WHERE user_id = ?
-    """, (user_id,))
+    cursor.execute("SELECT COUNT(DISTINCT card_id) FROM user_cards WHERE user_id = ?", (user_id,))
     user_cards_count = cursor.fetchone()[0] or 0
 
-    # Подсчитываем общее количество карт во вселенной
     cursor.execute(f"SELECT COUNT(*) FROM [{selected_universe}]")
     total_universe_cards = cursor.fetchone()[0] or 0
 
     conn.close()
 
-    # Формируем текст профиля
     profile_text = (
         f"👤 Ваш профиль:\n\n"
         f"🌌 Выбранная вселенная: {selected_universe.capitalize()}\n"

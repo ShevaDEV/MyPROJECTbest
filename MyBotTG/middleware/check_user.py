@@ -1,42 +1,61 @@
-from aiogram import Router, types
-from aiogram.types import Message
+import sqlite3
+from aiogram import types, Router, Bot
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
 from aiogram.exceptions import TelegramAPIError
-import sqlite3
+from cards.universe_choice import select_universe
+from handlers.usershand.referal import check_referral_validity  # ✅ Импортируем
+from config import CHANNEL_ID
 
 class CheckUserMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: types.Update, data: dict):
-        # Получаем ID пользователя
-        user_id = event.message.from_user.id if isinstance(event.message, types.Message) else None
+        """Проверяет, зарегистрирован ли пользователь, и обрабатывает рефералов."""
+        bot: Bot = data["bot"]  # Получаем объект бота
+        message = event.message if isinstance(event.message, types.Message) else None
 
-        # Если это команда /start, пропускаем проверку
-        if event.message and event.message.text == "/start":
+        # Если нет сообщения или пользователя — продолжаем обработку
+        if not message or not message.from_user:
             return await handler(event, data)
 
-        if user_id:
-            conn = sqlite3.connect("bot_database.db")
-            cursor = conn.cursor()
+        user_id = message.from_user.id
 
-            # Проверяем, зарегистрирован ли пользователь
-            cursor.execute("SELECT EXISTS(SELECT 1 FROM users WHERE user_id = ?)", (user_id,))
-            is_registered = cursor.fetchone()[0]
+        conn = sqlite3.connect("bot_database.db")
+        cursor = conn.cursor()
 
-            # Проверяем, не находится ли пользователь в черном списке
-            cursor.execute("SELECT is_blacklisted FROM users WHERE user_id = ?", (user_id,))
-            result = cursor.fetchone()
-            is_blacklisted = result[0] if result else None
+        # Проверяем, зарегистрирован ли пользователь
+        cursor.execute("SELECT user_id, is_blacklisted, selected_universe FROM users WHERE user_id = ?", (user_id,))
+        user_data = cursor.fetchone()
 
-            conn.close()
+        if user_data:
+            if user_data[1]:  # Если в бане
+                await message.answer("🚫 У вас нет доступа к боту.")
+                return False  
 
-            # Если пользователь не зарегистрирован или в черном списке, отменяем обработку
-            if not is_registered:
-                await event.message.answer("Пожалуйста, начните с команды /start, чтобы зарегистрироваться.")
-                return False  # Блокируем обработку
+            # Если вселенная не выбрана, предлагаем выбрать
+            if not user_data[2]:
+                await select_universe(message)
+                return False  
 
-            if is_blacklisted:
-                await event.message.answer("Вы не можете использовать этого бота, так как он находится в вашем черном списке.")
-                return False  # Блокируем обработку
+            return await handler(event, data)  # Пользователь зарегистрирован → продолжаем обработку
 
-        # Передаём управление следующему обработчику, если всё в порядке
-        return await handler(event, data)
+        # Новый пользователь → регистрация
+        referrer_id = None
+        if message.text and message.text.startswith("/start "):
+            parts = message.text.split()
+            if len(parts) > 1 and parts[1].isdigit():  
+                referrer_id = int(parts[1])
 
+        cursor.execute("""
+            INSERT INTO users (user_id, username, registration_date)
+            VALUES (?, ?, datetime('now'))
+        """, (user_id, message.from_user.username))
+        conn.commit()
+
+        # Если есть реферальный код → обрабатываем реферала
+        if referrer_id:
+            await check_referral_validity(user_id, bot)  # ✅ Исправлено
+
+        conn.close()
+
+        # После регистрации сразу предлагаем выбрать вселенную
+        await select_universe(message)
+        return False  # Прерываем обработку, пока не выберет вселенную

@@ -16,13 +16,13 @@ def calculate_bonus(streak: int) -> int:
     return min(streak, 7)  # Максимум 7 прокруток
 
 # Ежедневный бонус
-async def give_daily_bonus(user_id: int) -> tuple[bool, int, int]:
+async def give_daily_bonus(user_id: int) -> tuple[bool, int, int, str]:
     """
     Выдает ежедневный бонус, если прошло 24 часа.
     Если пользователь пропустил хотя бы 1 день — стрик сбрасывается.
     
     :param user_id: ID пользователя
-    :return: (успех, новый стрик, полученный бонус)
+    :return: (успех, новый стрик, полученный бонус, время до следующего бонуса)
     """
     try:
         with sqlite3.connect("bot_database.db") as conn:
@@ -44,7 +44,7 @@ async def give_daily_bonus(user_id: int) -> tuple[bool, int, int]:
                     WHERE user_id = ?
                 """, (get_current_time(), user_id))
                 conn.commit()
-                return True, 1, 1  # Выдан 1 бонус
+                return True, 1, 1, ""  # Выдан 1 бонус, и время до следующего бонуса - пусто
 
             last_claimed, daily_streak = user_data
             last_claimed_time = datetime.strptime(last_claimed, '%Y-%m-%d %H:%M:%S')
@@ -53,10 +53,12 @@ async def give_daily_bonus(user_id: int) -> tuple[bool, int, int]:
             hours_since_last_claim = (now - last_claimed_time).total_seconds() / 3600
 
             if hours_since_last_claim < 24:
-                return False, daily_streak, 0  # Бонус уже получен сегодня
+                remaining_time = timedelta(hours=24) - (now - last_claimed_time)
+                return False, daily_streak, 0, str(remaining_time).split('.')[0]  # Возвращаем время до бонуса
 
+            # Проверяем, прошло ли более 48 часов, сбрасываем стрик, если да
             if hours_since_last_claim >= 48:
-                daily_streak = 0  # ❗ Сбрасываем стрик, если пропущено больше 1 дня
+                daily_streak = 0  # Сбрасываем стрик
 
             # Вычисляем бонус (1-7 прокруток в зависимости от стрика)
             bonus = calculate_bonus(daily_streak + 1)
@@ -68,16 +70,16 @@ async def give_daily_bonus(user_id: int) -> tuple[bool, int, int]:
             """, (get_current_time(), daily_streak + 1, bonus, user_id))
             conn.commit()
 
-            return True, daily_streak + 1, bonus  # ✅ Теперь возвращает только бонус
+            return True, daily_streak + 1, bonus, ""  # ✅ Теперь возвращает только бонус и пустую строку для времени
     except Exception as e:
         logging.error(f"Ошибка при выдаче ежедневного бонуса: {e}")
-        return False, 0, 0
+        return False, 0, 0, ""
 
 # Хендлер команды /daily
 @dailyreward_router.message(Command("daily"))
 async def daily_reward(message: types.Message):
     user_id = message.from_user.id
-    success, streak, bonus = await give_daily_bonus(user_id)
+    success, streak, bonus, remaining_time = await give_daily_bonus(user_id)
 
     if success:
         reward_message = (
@@ -89,7 +91,7 @@ async def daily_reward(message: types.Message):
         reward_message = (
             f"⏳ *Вы уже получили бонус сегодня.*\n\n"
             f"🌟 Стрик: *{streak}* день(ей).\n"
-            f"Попробуйте снова через 24 часа."
+            f"Попробуйте снова через: *{remaining_time}*."
         )
 
     await message.answer(reward_message, parse_mode="Markdown")

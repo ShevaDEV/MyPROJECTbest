@@ -19,7 +19,9 @@ def init_db():
         total_points INTEGER DEFAULT 0,
         spins INTEGER DEFAULT 0,
         last_claimed TEXT DEFAULT NULL,
-        daily_streak INTEGER DEFAULT 0
+        daily_streak INTEGER DEFAULT 0,
+        referral_code TEXT UNIQUE,  -- Уникальный код пользователя
+        referred_by INTEGER DEFAULT NULL  -- Кто пригласил пользователя
     )
     """)
 
@@ -32,7 +34,6 @@ def init_db():
     )
     """)
 
-
     # Таблица карт пользователя
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS user_cards (
@@ -42,7 +43,6 @@ def init_db():
         quantity INTEGER DEFAULT 1,
         PRIMARY KEY (user_id, card_id, universe_id),
         FOREIGN KEY (user_id) REFERENCES users (user_id),
-        FOREIGN KEY (card_id) REFERENCES cards (card_id),
         FOREIGN KEY (universe_id) REFERENCES universes (universe_id)
     )
     """)
@@ -79,6 +79,19 @@ def init_db():
         price INTEGER,
         FOREIGN KEY (user_id) REFERENCES users (user_id),
         FOREIGN KEY (universe_id) REFERENCES universes (universe_id)
+    )
+    """)
+
+    # Таблица рефералов
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS referrals (
+        referral_id INTEGER PRIMARY KEY,  -- ID приглашенного
+        referrer_id INTEGER,  -- ID пригласившего
+        joined_date TEXT,  -- Дата регистрации
+        cards_collected INTEGER DEFAULT 0,  -- Карты, собранные рефералом
+        is_valid BOOLEAN DEFAULT 0,  -- Засчитался ли реферал
+        FOREIGN KEY (referral_id) REFERENCES users (user_id),
+        FOREIGN KEY (referrer_id) REFERENCES users (user_id)
     )
     """)
 

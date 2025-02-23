@@ -45,7 +45,7 @@ async def start_universe_change(callback: types.CallbackQuery, state: FSMContext
             [InlineKeyboardButton(text=name, callback_data=f"change_universe_{uid}")]
             for name, uid in available_universes.items()
         ] + [
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_universe_selection")]
+            [InlineKeyboardButton(text="Отмена", callback_data="cancel_universe_selection")]
         ]
     )
 
@@ -112,6 +112,6 @@ async def confirm_change_universe(callback: types.CallbackQuery, state: FSMConte
 @change_universe_router.callback_query(F.data == "cancel_universe_change")
 async def cancel_change_universe(callback: types.CallbackQuery, state: FSMContext):
     """Отмена смены вселенной."""
-    await callback.message.answer("❌ Отмена смены вселенной. Ваши карты сохранены.")
+    await callback.message.answer("Отмена смены вселенной. Ваши карты сохранены.")
     await callback.answer()
     await state.clear()

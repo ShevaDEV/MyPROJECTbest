@@ -1,16 +1,14 @@
+import sqlite3
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
-import sqlite3
 import os
 import logging
 from config import OWNER_ID
 from handlers.cardshand.callbackcards import OwnerRarityCallback, EditCardCallback, AdminPaginationCallback
 from kbds.inlinecards import rarity_keyboard_for_owner, admin_pagination_keyboard
-
-AVAILABLE_UNIVERSES = ["marvel", "star_wars", "dc"]
 
 admincards_router = Router()
 
@@ -23,26 +21,52 @@ async def admin_view_cards(message: types.Message):
         return
 
     logging.info("Отправлено сообщение для выбора вселенной.")
+    
+    # Подключаемся к базе данных и получаем доступные вселенные
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT universe_id, name FROM universes WHERE enabled = 1")
+    universes = cursor.fetchall()
+    conn.close()
+
+    if not universes:
+        await message.answer("Нет доступных вселенных.")
+        return
+
     builder = InlineKeyboardBuilder()
-    for universe in AVAILABLE_UNIVERSES:
-        builder.row(InlineKeyboardButton(text=universe.capitalize(), callback_data=f"view_{universe}"))
+    for universe_id, universe_name in universes:
+        # Теперь имя вселенной будет отображаться как в базе данных, без изменений
+        builder.row(InlineKeyboardButton(text=universe_name, callback_data=f"view_{universe_id}"))
+    
     await message.answer("Выберите вселенную:", reply_markup=builder.as_markup())
 
 # Обработчик для выбора вселенной
 @admincards_router.callback_query(lambda c: c.data.startswith("view_"))
 async def view_universe(callback: types.CallbackQuery):
-    universe = callback.data.split("_")[1]
+    universe_id = callback.data.split("_", 1)[1]  # Получаем id вселенной, теперь используем full id (например, "star_wars")
 
-    if universe not in AVAILABLE_UNIVERSES:
+    # Логируем выбранную вселенную
+    logging.info(f"Попытка выбрать вселенную: {universe_id}")
+
+    # Проверяем, существует ли вселенная в базе данных
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT enabled, name FROM universes WHERE universe_id = ?", (universe_id,))
+    result = cursor.fetchone()
+    conn.close()
+
+    if result is None or result[0] != 1:
         await callback.answer("Выбранная вселенная недоступна.")
+        logging.error(f"Вселенная {universe_id} не найдена или не доступна в базе данных.")
         return
 
-    # Используем rarity_keyboard_for_owner из inlinecards
-    rarity_kb = rarity_keyboard_for_owner(universe)
+    universe_name = result[1]  # Получаем полное имя вселенной, например, "Star Wars"
 
-    # Отправляем клавиатуру с редкостями
-    await callback.message.answer(f"Выберите редкость карт из вселенной {universe.capitalize()}:", reply_markup=rarity_kb)
+    # Если все проверки пройдены, отправляем клавиатуру с редкостями
+    rarity_kb = rarity_keyboard_for_owner(universe_id)
+    await callback.message.answer(f"Выберите редкость карт из вселенной {universe_name}:", reply_markup=rarity_kb)
     await callback.answer()
+
 
 # Добавляем обработчик для редкости
 @admincards_router.callback_query(OwnerRarityCallback.filter())

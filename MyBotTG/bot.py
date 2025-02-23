@@ -12,6 +12,7 @@ from handlers.usershand.user_private import router
 from handlers.cardshand.dobcards import dobcards_router
 from handlers.cardshand.cardsall import cardsall_router
 from handlers.cardshand.cardreceive import cardreceive_router
+from handlers.usershand.referal import referal_router
 from kbds.cardspagination import cardspagination_router
 from promo.promocode import promocode_router
 from handlers.usershand.admin import admin_router
@@ -66,6 +67,7 @@ dp.include_router(admin_pagination_router)
 dp.include_router(admincardedit_router)
 dp.include_router(universecheck_router)
 dp.include_router(adduniverse_router)
+dp.include_router(referal_router)
 
 async def main():
     scheduler.start()  # Запуск планировщика внутри event loop
