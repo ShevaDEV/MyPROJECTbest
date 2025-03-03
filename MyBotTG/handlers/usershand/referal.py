@@ -1,10 +1,11 @@
-import sqlite3
+import aiosqlite
 import random
 from aiogram import Router, types, Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import CHANNEL_ID, CHANNEL_LINK
+from dabase.database import db_instance  # Используем асинхронное подключение
 
 referal_router = Router()
 
@@ -18,14 +19,12 @@ async def is_user_subscribed(bot: Bot, user_id: int) -> bool:
         return False  # Ошибка доступа к каналу
 
 # Получение количества карт у пользователя
-def get_user_card_count(user_id: int) -> int:
+async def get_user_card_count(user_id: int) -> int:
     """Подсчитывает количество карт у пользователя."""
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM user_cards WHERE user_id = ?", (user_id,))
-    count = cursor.fetchone()[0] or 0
-    conn.close()
-    return count
+    async with await db_instance.get_connection() as db:
+        async with db.execute("SELECT COUNT(*) FROM user_cards WHERE user_id = ?", (user_id,)) as cursor:
+            count = await cursor.fetchone()
+    return count[0] if count else 0
 
 # Проверка выполнения условий для реферала
 async def check_referral_validity(user_id: int, bot: Bot):
@@ -35,39 +34,32 @@ async def check_referral_validity(user_id: int, bot: Bot):
     - Собрал 3 карты
     - Только после этого реферал засчитывается
     """
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
+    async with await db_instance.get_connection() as db:
+        async with db.execute("SELECT referrer_id, is_valid FROM referrals WHERE referral_id = ?", (user_id,)) as cursor:
+            referral_data = await cursor.fetchone()
 
-    cursor.execute("SELECT referrer_id, is_valid FROM referrals WHERE referral_id = ?", (user_id,))
-    referral_data = cursor.fetchone()
+        if not referral_data:
+            return
 
-    if not referral_data:
-        conn.close()
-        return
+        referrer_id, is_valid = referral_data
 
-    referrer_id, is_valid = referral_data
+        # Если уже засчитан — ничего не делаем
+        if is_valid:
+            return  
 
-    # Если уже засчитан — ничего не делаем
-    if is_valid:
-        conn.close()
-        return  
+        # Проверяем подписку
+        if not await is_user_subscribed(bot, user_id):
+            return  # Если не подписан — не засчитываем
 
-    # Проверяем подписку
-    if not await is_user_subscribed(bot, user_id):
-        conn.close()
-        return  # Если не подписан — не засчитываем
+        # Проверяем, собрал ли 3 карты
+        if await get_user_card_count(user_id) < 3:
+            return  
 
-    # Проверяем, собрал ли 3 карты
-    if get_user_card_count(user_id) < 3:
-        conn.close()
-        return  
-
-    # Если все условия выполнены, засчитываем реферала
-    cursor.execute("UPDATE referrals SET is_valid = 1 WHERE referral_id = ?", (user_id,))
-    cursor.execute("UPDATE users SET spins = spins + 1 WHERE user_id = ?", (referrer_id,))  # 1 крутка пригласившему
-    cursor.execute("UPDATE users SET spins = spins + 2 WHERE user_id = ?", (user_id,))  # 2 крутки приглашенному
-    conn.commit()
-    conn.close()
+        # Если все условия выполнены, засчитываем реферала
+        await db.execute("UPDATE referrals SET is_valid = 1 WHERE referral_id = ?", (user_id,))
+        await db.execute("UPDATE users SET spins = spins + 1 WHERE user_id = ?", (referrer_id,))  # 1 крутка пригласившему
+        await db.execute("UPDATE users SET spins = spins + 2 WHERE user_id = ?", (user_id,))  # 2 крутки приглашенному
+        await db.commit()
 
 # Получение реферальной ссылки
 def get_referral_link(user_id: int) -> str:
@@ -78,13 +70,16 @@ def get_referral_link(user_id: int) -> str:
 def referral_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Создает клавиатуру для рефералов."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Пригласить друзей", url=get_referral_link(user_id))],
-        [InlineKeyboardButton(text="📊 Мои рефералы", callback_data="my_referrals")]
+        [InlineKeyboardButton(text="📢 Отправить другу", url=f"https://t.me/share/url?url={get_referral_link(user_id)}")],
+        [InlineKeyboardButton(text="📊 Мои рефералы", callback_data="my_referrals")],
+        [InlineKeyboardButton(text="Назад в профиль", callback_data="back_to_profile")]
     ])
 
 # Хендлер команды /referral
+@referal_router.message(Command("referral"))
+@referal_router.message(lambda message: message.text.lower() == "рефералы")
 async def show_referral_info(message: types.Message):
-    """Показывает реферальную информацию, заменяя профиль или отправляя новое сообщение."""
+    """Показывает реферальную информацию."""
     user_id = message.chat.id
     referral_link = get_referral_link(user_id)
 
@@ -97,21 +92,16 @@ async def show_referral_info(message: types.Message):
         "🎁 *Что вы получите?*\n"
         "👤 *Ты* — 1 бесплатную крутку 🎡\n"
         "🆕 *Твой друг* — 2 бесплатные крутки 🎉\n"
-        "🔥 *Бонус:* за каждые 5 приглашенных друзей ты получишь *ещё 2 крутки!*"
-        "\n\n📢 *Приглашай друзей прямо сейчас!*"
+        "🔥 *Бонус:* за каждые 5 приглашенных друзей ты получишь *ещё 2 крутки!*\n\n"
+        f"📋 *Ваша реферальная ссылка:*\n`{referral_link}`\n\nПросто нажмите и скопируйте! ✨"
     )
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Отправить другу", url=f"https://t.me/share/url?url={referral_link}")],
-        [InlineKeyboardButton(text="Назад в профиль", callback_data="back_to_profile")]
-    ])
+    keyboard = referral_keyboard(user_id)
 
     try:
         await message.edit_text(text, reply_markup=keyboard, parse_mode="Markdown")
     except TelegramAPIError:
         await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
-
-
 
 # Хендлер "Мои рефералы"
 @referal_router.callback_query(lambda c: c.data == "my_referrals")
@@ -119,20 +109,17 @@ async def my_referrals(callback: types.CallbackQuery):
     """Показывает список рефералов и бонусы."""
     user_id = callback.from_user.id
 
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
+    async with await db_instance.get_connection() as db:
+        async with db.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND is_valid = 1", (user_id,)) as cursor:
+            valid_referrals = await cursor.fetchone()
 
-    cursor.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND is_valid = 1", (user_id,))
-    valid_referrals = cursor.fetchone()[0]
-
+    valid_referrals = valid_referrals[0] if valid_referrals else 0
     extra_spins = (valid_referrals // 5) * 2  # +2 крутки за каждые 5 рефералов
-
-    conn.close()
 
     await callback.message.edit_text(
         f"📊 *Ваши рефералы*\n\n"
         f"✅ Засчитано рефералов: *{valid_referrals}*\n"
-        f"🎁 Бонусные крутки: *{valid_referrals}*\n"
+        f"🎁 Бонусные крутки: *{valid_referrals}*\n"    
         f"🔥 Доп. бонус за 5+ рефералов: *{extra_spins}*",
         parse_mode="Markdown"
     )

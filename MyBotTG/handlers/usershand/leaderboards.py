@@ -2,7 +2,8 @@ from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-import sqlite3
+import aiosqlite
+from dabase.database import db_instance  # Используем асинхронную БД
 
 leaderboard_router = Router()
 
@@ -18,39 +19,37 @@ async def get_leaderboard_with_position(user_id: int) -> str:
     :param user_id: ID пользователя для отображения его позиции.
     :return: Отформатированный текст топа.
     """
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
+    async with await db_instance.get_connection() as db:
+        # Получаем топ-10 пользователей
+        async with db.execute("""
+            SELECT username, total_points
+            FROM users
+            WHERE total_points > 0
+            ORDER BY total_points DESC
+            LIMIT 10
+        """) as cursor:
+            top_users = await cursor.fetchall()
 
-    # Получаем топ-10 пользователей
-    cursor.execute("""
-        SELECT username, total_points
-        FROM users
-        WHERE total_points > 0
-        ORDER BY total_points DESC
-        LIMIT 10
-    """)
-    top_users = cursor.fetchall()
+        # Определяем позицию текущего пользователя
+        async with db.execute("""
+            SELECT COUNT(*) + 1
+            FROM users
+            WHERE total_points > (SELECT total_points FROM users WHERE user_id = ?)
+        """, (user_id,)) as cursor:
+            user_position = (await cursor.fetchone())[0]
 
-    # Определяем позицию текущего пользователя
-    cursor.execute("""
-        SELECT COUNT(*) + 1
-        FROM users
-        WHERE total_points > (SELECT total_points FROM users WHERE user_id = ?)
-    """, (user_id,))
-    user_position = cursor.fetchone()[0]
-
-    # Получаем данные текущего пользователя
-    cursor.execute("""
-        SELECT username, total_points
-        FROM users
-        WHERE user_id = ?
-    """, (user_id,))
-    current_user_data = cursor.fetchone()
-    conn.close()
+        # Получаем данные текущего пользователя
+        async with db.execute("""
+            SELECT username, total_points
+            FROM users
+            WHERE user_id = ?
+        """, (user_id,)) as cursor:
+            current_user_data = await cursor.fetchone()
 
     # Формируем текст топа
     leaderboard_text = "🏆 *Топ-10 пользователей по очкам сезона:*\n\n"
-    for i, (username, points) in enumerate(top_users, start=1):
+    for i, row in enumerate(top_users, start=1):
+        username, points = row
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}️⃣"
         leaderboard_text += f"{medal} - {username or 'Безымянный'}: {points} очков\n"
 
