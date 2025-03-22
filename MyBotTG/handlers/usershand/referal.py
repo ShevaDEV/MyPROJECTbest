@@ -9,7 +9,7 @@ from dabase.database import db_instance  # Используем асинхрон
 
 referal_router = Router()
 
-# Функция проверки подписки
+
 async def is_user_subscribed(bot: Bot, user_id: int) -> bool:
     """Проверяет, подписан ли пользователь на канал."""
     try:
@@ -18,7 +18,7 @@ async def is_user_subscribed(bot: Bot, user_id: int) -> bool:
     except Exception:
         return False  # Ошибка доступа к каналу
 
-# Получение количества карт у пользователя
+
 async def get_user_card_count(user_id: int) -> int:
     """Подсчитывает количество карт у пользователя."""
     async with await db_instance.get_connection() as db:
@@ -26,10 +26,10 @@ async def get_user_card_count(user_id: int) -> int:
             count = await cursor.fetchone()
     return count[0] if count else 0
 
-# Проверка выполнения условий для реферала
+
 async def check_referral_validity(user_id: int, bot: Bot):
     """
-    Проверяет выполнение условий:
+    Проверяет выполнение условий реферала:
     - Приглашенный подписан на канал
     - Собрал 3 карты
     - Только после этого реферал засчитывается
@@ -43,16 +43,13 @@ async def check_referral_validity(user_id: int, bot: Bot):
 
         referrer_id, is_valid = referral_data
 
-        # Если уже засчитан — ничего не делаем
-        if is_valid:
+        if is_valid:  # Если уже засчитан — ничего не делаем
             return  
 
-        # Проверяем подписку
-        if not await is_user_subscribed(bot, user_id):
-            return  # Если не подписан — не засчитываем
+        if not await is_user_subscribed(bot, user_id):  # Проверяем подписку
+            return  
 
-        # Проверяем, собрал ли 3 карты
-        if await get_user_card_count(user_id) < 3:
+        if await get_user_card_count(user_id) < 3:  # Проверяем количество карт
             return  
 
         # Если все условия выполнены, засчитываем реферала
@@ -61,12 +58,12 @@ async def check_referral_validity(user_id: int, bot: Bot):
         await db.execute("UPDATE users SET spins = spins + 2 WHERE user_id = ?", (user_id,))  # 2 крутки приглашенному
         await db.commit()
 
-# Получение реферальной ссылки
+
 def get_referral_link(user_id: int) -> str:
     """Возвращает реферальную ссылку пользователя."""
     return f"https://t.me/WhilacBot?start={user_id}"
 
-# Создание клавиатуры
+
 def referral_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Создает клавиатуру для рефералов."""
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -75,9 +72,9 @@ def referral_keyboard(user_id: int) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Назад в профиль", callback_data="back_to_profile")]
     ])
 
-# Хендлер команды /referral
+
+# ✅ **Исправленный обработчик команды `/referral`**
 @referal_router.message(Command("referral"))
-@referal_router.message(lambda message: message.text.lower() == "рефералы")
 async def show_referral_info(message: types.Message):
     """Показывает реферальную информацию."""
     user_id = message.chat.id
@@ -103,7 +100,15 @@ async def show_referral_info(message: types.Message):
     except TelegramAPIError:
         await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
 
-# Хендлер "Мои рефералы"
+
+# ✅ **Исправленный обработчик текстовой команды `"рефералы"`**
+@referal_router.message(lambda message: message.text and message.text.lower() == "рефералы")
+async def show_referral_info_text(message: types.Message):
+    """Обработчик текстовой команды 'рефералы'."""
+    await show_referral_info(message)
+
+
+# ✅ **Обработчик "Мои рефералы"**
 @referal_router.callback_query(lambda c: c.data == "my_referrals")
 async def my_referrals(callback: types.CallbackQuery):
     """Показывает список рефералов и бонусы."""

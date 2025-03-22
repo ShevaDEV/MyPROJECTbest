@@ -1,4 +1,3 @@
-import sqlite3
 from aiogram import types, Router
 from handlers.cardshand.cardsall import show_user_cards
 from promo.promocode import handle_promocode_input
@@ -28,24 +27,17 @@ async def process_change_universe(callback: types.CallbackQuery, state: FSMConte
 @profile_callbacks_router.callback_query(lambda c: c.data == "cancel_universe_selection")
 async def cancel_universe_selection(callback: types.CallbackQuery, state: FSMContext):
     """Отмена выбора вселенной и возвращаем в профиль пользователя."""
-    user_id = callback.from_user.id
-
-    # Удаляем сообщение с выбором вселенной
     await callback.message.delete()  
     await callback.answer("🔙 Возвращаюсь в профиль...")
 
-    # Отправляем профиль пользователя
-    await show_profile(callback)
-
+    await show_profile(callback)  # Отправляем профиль пользователя
     await state.clear()  # Очищаем состояние FSM
-
 
 @profile_callbacks_router.callback_query(lambda c: c.data == "view_referrals")
 async def view_referrals_from_profile(callback: types.CallbackQuery):
     """Обработчик кнопки 'Рефералы' в профиле."""
     await callback.message.delete()  # Удаляем сообщение профиля
     await show_referral_info(callback.message)  # Показываем реферальную систему
-
 
 @profile_callbacks_router.callback_query(lambda c: c.data == "back_to_profile")
 async def back_to_profile(callback: types.CallbackQuery):

@@ -1,9 +1,11 @@
 import aiosqlite
+import asyncio
 from aiogram import types, Bot
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
 from cards.universe_choice import select_universe
 from handlers.usershand.referal import check_referral_validity
-from dabase.database import db_instance  # ✅ Используем правильный объект БД
+from dabase.database import db_instance
+from utils.telegram_safe_request import safe_telegram_request  # Импортируем новый модуль
 
 class CheckUserMiddleware(BaseMiddleware):
     async def __call__(self, handler, event: types.Update, data: dict):
@@ -28,11 +30,13 @@ class CheckUserMiddleware(BaseMiddleware):
 
                 if user_data:
                     if user_data["is_blacklisted"]:
-                        await message.answer("🚫 У вас нет доступа к боту.")
+                        await safe_telegram_request(
+                            lambda session: message.answer("🚫 У вас нет доступа к боту.")
+                        )
                         return False
 
                     if not user_data["selected_universe"]:
-                        await select_universe(message)
+                        await select_universe(message, bot)  # Передаем bot для использования safe_telegram_request
                         return False
 
                     return await handler(event, data)
@@ -52,9 +56,12 @@ class CheckUserMiddleware(BaseMiddleware):
 
                 # 🔗 Проверяем реферальную систему
                 if referrer_id:
-                    await check_referral_validity(user_id, bot)
+                    await check_referral_validity(user_id, bot)  # Передаем bot для использования safe_telegram_request
 
-                await select_universe(message)
+                await select_universe(message, bot)  # Передаем bot для использования safe_telegram_request
                 return False
         except RuntimeError as e:
-            await message.answer(str(e))
+            await safe_telegram_request(
+                lambda session: message.answer(str(e))
+            )
+            return False

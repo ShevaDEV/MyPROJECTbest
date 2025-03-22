@@ -1,4 +1,4 @@
-import sqlite3
+import aiosqlite
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -9,33 +9,27 @@ change_universe_router = Router()
 # Определяем состояния ФСМ
 class ChangeUniverseState(StatesGroup):
     waiting_for_universe = State()
-    waiting_for_confirmation = State()  # Добавляем этап подтверждения
+    waiting_for_confirmation = State()  # Этап подтверждения
 
-def get_available_universes():
+
+async def get_available_universes():
     """Получает список доступных вселенных из базы данных."""
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT universe_id, name FROM universes WHERE enabled = 1")
-    universes = cursor.fetchall()
-    conn.close()
-    return {name: universe_id for universe_id, name in universes}
+    async with aiosqlite.connect("bot_database.db") as conn:
+        cursor = await conn.execute("SELECT universe_id, name FROM universes WHERE enabled = 1")
+        universes = await cursor.fetchall()
+        return {name: universe_id for universe_id, name in universes}
+
 
 async def reset_user_universe(user_id: int):
     """Удаляет все карты пользователя, но сохраняет очки."""
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    
-    # Удаляем карты пользователя
-    cursor.execute("DELETE FROM user_cards WHERE user_id = ?", (user_id,))
-    
-    conn.commit()
-    conn.close()
+    async with aiosqlite.connect("bot_database.db") as conn:
+        await conn.execute("DELETE FROM user_cards WHERE user_id = ?", (user_id,))
+        await conn.commit()
+
 
 async def start_universe_change(callback: types.CallbackQuery, state: FSMContext):
     """Запуск смены вселенной через ФСМ."""
-    user_id = callback.from_user.id
-
-    available_universes = get_available_universes()
+    available_universes = await get_available_universes()
     if not available_universes:
         await callback.message.answer("❌ Нет доступных вселенных для выбора.")
         return
@@ -57,12 +51,23 @@ async def start_universe_change(callback: types.CallbackQuery, state: FSMContext
     await state.set_state(ChangeUniverseState.waiting_for_universe)
 
 
-
 @change_universe_router.callback_query(F.data.startswith("change_universe_"))
 async def process_universe_selection(callback: types.CallbackQuery, state: FSMContext):
     """Обрабатывает выбор новой вселенной (запрашивает подтверждение)."""
-    user_id = callback.from_user.id
-    new_universe_id = callback.data.split("_", 2)[2]  # Теперь берём ID правильно
+    try:
+        new_universe_id = callback.data.split("_", 1)[1]
+    except IndexError:
+        await callback.message.answer("⚠️ Ошибка: невозможно определить выбранную вселенную.")
+        return
+
+    # Проверяем, существует ли вселенная
+    async with aiosqlite.connect("bot_database.db") as conn:
+        cursor = await conn.execute("SELECT COUNT(*) FROM universes WHERE universe_id = ?", (new_universe_id,))
+        exists = await cursor.fetchone()
+    
+    if not exists or exists[0] == 0:
+        await callback.message.answer("❌ Ошибка: выбранная вселенная не существует!")
+        return
 
     # Сохраняем выбранную вселенную во временное состояние
     await state.update_data(new_universe=new_universe_id)
@@ -84,6 +89,7 @@ async def process_universe_selection(callback: types.CallbackQuery, state: FSMCo
     await callback.answer()
     await state.set_state(ChangeUniverseState.waiting_for_confirmation)  # Ожидаем подтверждения
 
+
 @change_universe_router.callback_query(F.data == "confirm_universe_change")
 async def confirm_change_universe(callback: types.CallbackQuery, state: FSMContext):
     """Подтверждает смену вселенной и выполняет очистку карт."""
@@ -99,15 +105,14 @@ async def confirm_change_universe(callback: types.CallbackQuery, state: FSMConte
 
     await reset_user_universe(user_id)
 
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET selected_universe = ? WHERE user_id = ?", (new_universe_id, user_id))
-    conn.commit()
-    conn.close()
+    async with aiosqlite.connect("bot_database.db") as conn:
+        await conn.execute("UPDATE users SET selected_universe = ? WHERE user_id = ?", (new_universe_id, user_id))
+        await conn.commit()
 
     await callback.message.answer("🎉 Вы успешно сменили вселенную! Ваши карты были удалены.")
     await callback.answer()
     await state.clear()
+
 
 @change_universe_router.callback_query(F.data == "cancel_universe_change")
 async def cancel_change_universe(callback: types.CallbackQuery, state: FSMContext):

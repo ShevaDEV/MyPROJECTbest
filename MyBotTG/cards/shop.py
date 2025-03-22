@@ -1,9 +1,8 @@
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-import sqlite3
+import aiosqlite
 import random
-import asyncio
 
 shop_router = Router()
 
@@ -16,37 +15,39 @@ RARITY_WEIGHTS = {
     "мифическая": 1,
 }
 
-def generate_user_shop(user_id: int, universe: str):
-    with sqlite3.connect("bot_database.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM user_shop WHERE user_id = ? AND universe = ?", (user_id, universe))
+async def generate_user_shop(user_id: int, universe: str):
+    """Асинхронная генерация товаров в магазине пользователя."""
+    async with aiosqlite.connect("bot_database.db") as db:
+        await db.execute("DELETE FROM user_shop WHERE user_id = ? AND universe_id = ?", (user_id, universe))
 
         spins = random.randint(3, 8)
         spins_price = SPINS_COST[spins]
-        cursor.execute("""
-            INSERT INTO user_shop (user_id, universe, item_type, item_value, price)
+        await db.execute("""
+            INSERT INTO user_shop (user_id, universe_id, item_type, item_value, price)
             VALUES (?, ?, 'spins', ?, ?)
         """, (user_id, universe, spins, spins_price))
 
         rarity = random.choices(list(RARITY_WEIGHTS.keys()), weights=RARITY_WEIGHTS.values(), k=1)[0]
         rarity_price = calculate_rarity_price(rarity)
-        cursor.execute("""
-            INSERT INTO user_shop (user_id, universe, item_type, item_value, price)
+        await db.execute("""
+            INSERT INTO user_shop (user_id, universe_id, item_type, item_value, price)
             VALUES (?, ?, 'rarity_guarantee', ?, ?)
         """, (user_id, universe, rarity, rarity_price))
 
-        cursor.execute(f"SELECT card_id, name, rarity, points FROM [{universe}]")
-        cards = cursor.fetchall()
-        if cards:
-            card = random.choice(cards)
-            card_id, card_name, rarity, points = card
-            card_price = points * 3
-            cursor.execute("""
-                INSERT INTO user_shop (user_id, universe, item_type, item_value, price)
-                VALUES (?, ?, 'specific_card', ?, ?)
-            """, (user_id, universe, card_id, card_price))
+        async with db.execute(f"SELECT card_id, name, rarity, points FROM [{universe}]") as cursor:
+            cards = await cursor.fetchall()
+            if cards:
+                card_id, card_name, rarity, points = random.choice(cards)
+                card_price = points * 3
+                await db.execute("""
+                    INSERT INTO user_shop (user_id, universe_id, item_type, item_value, price)
+                    VALUES (?, ?, 'specific_card', ?, ?)
+                """, (user_id, universe, card_id, card_price))
+
+        await db.commit()
 
 def calculate_rarity_price(rarity: str) -> int:
+    """Возвращает цену гарантированной карты определенной редкости."""
     rarity_points = {
         "обычная": 150,
         "редкая": 400,
@@ -57,29 +58,22 @@ def calculate_rarity_price(rarity: str) -> int:
     return rarity_points[rarity] * 2
 
 async def update_all_shops():
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _sync_update_all_shops)
-
-def _sync_update_all_shops():
-    with sqlite3.connect("bot_database.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_id, selected_universe FROM users WHERE selected_universe IS NOT NULL")
-        users = cursor.fetchall()
-        for user_id, universe in users:
-            generate_user_shop(user_id, universe)
-        conn.commit()
+    """Асинхронное обновление магазинов всех пользователей."""
+    async with aiosqlite.connect("bot_database.db") as db:
+        async with db.execute("SELECT user_id, selected_universe FROM users WHERE selected_universe IS NOT NULL") as cursor:
+            users = await cursor.fetchall()
+            for user_id, universe in users:
+                await generate_user_shop(user_id, universe)
 
 @shop_router.message(Command("shop"))
 @shop_router.message(F.text.lower() == "магазин")
 async def show_shop(message: types.Message):
+    """Показывает магазин пользователя."""
     user_id = message.from_user.id
 
-    with sqlite3.connect("bot_database.db") as conn:
-        cursor = conn.cursor()
-
-        # Получаем вселенную пользователя
-        cursor.execute("SELECT selected_universe, total_points FROM users WHERE user_id = ?", (user_id,))
-        user_data = cursor.fetchone()
+    async with aiosqlite.connect("bot_database.db") as db:
+        async with db.execute("SELECT selected_universe, total_points FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            user_data = await cursor.fetchone()
 
         if not user_data or not user_data[0]:
             await message.answer("❌ Вы не выбрали вселенную. Используйте /select_universe для выбора.")
@@ -87,25 +81,22 @@ async def show_shop(message: types.Message):
 
         selected_universe, user_balance = user_data
 
-        # Получаем список товаров
-        cursor.execute("""
+        async with db.execute("""
             SELECT item_id, item_type, item_value, price 
             FROM user_shop 
-            WHERE user_id = ? AND universe = ?
-        """, (user_id, selected_universe))
-        items = cursor.fetchall()
+            WHERE user_id = ? AND universe_id = ?
+        """, (user_id, selected_universe)) as cursor:
+            items = await cursor.fetchall()
 
-        # Если товаров нет, генерируем новые
         if not items:
-            generate_user_shop(user_id, selected_universe)
-            cursor.execute("""
+            await generate_user_shop(user_id, selected_universe)
+            async with db.execute("""
                 SELECT item_id, item_type, item_value, price 
                 FROM user_shop 
-                WHERE user_id = ? AND universe = ?
-            """, (user_id, selected_universe))
-            items = cursor.fetchall()
+                WHERE user_id = ? AND universe_id = ?
+            """, (user_id, selected_universe)) as cursor:
+                items = await cursor.fetchall()
 
-    # Формируем сообщение магазина
     shop_text = (
         f"🛒 *Магазин вселенной {selected_universe.capitalize()}*\n"
         f"💰 Ваш баланс: *{user_balance}* очков\n\n"
@@ -124,9 +115,11 @@ async def show_shop(message: types.Message):
             button_text = f"🛍 Гарант"
 
         elif item_type == "specific_card":
-            cursor.execute(f"SELECT name FROM [{selected_universe}] WHERE card_id = ?", (item_value,))
-            card_name = cursor.fetchone()[0]
-            shop_text += f"🃏 Карта: *{card_name}* — *{price}* очков\n"
+            async with aiosqlite.connect("bot_database.db") as db:
+                async with db.execute(f"SELECT name FROM [{selected_universe}] WHERE card_id = ?", (item_value,)) as cursor:
+                    card_name = await cursor.fetchone()
+
+            shop_text += f"🃏 Карта: *{card_name[0]}* — *{price}* очков\n"
             button_text = f"🛍 Карта"
 
         keyboard.inline_keyboard.append([InlineKeyboardButton(text=button_text, callback_data=f"buy_{item_id}")])
@@ -135,5 +128,6 @@ async def show_shop(message: types.Message):
 
 @shop_router.message(Command("update_shop"))
 async def update_shop(message: types.Message):
+    """Обновляет магазин пользователей."""
     await update_all_shops()
     await message.answer("🔄 Магазин обновлен!")

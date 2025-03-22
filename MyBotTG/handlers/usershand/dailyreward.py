@@ -1,8 +1,8 @@
-from aiogram import Router, types
-from aiogram.filters import Command
-from datetime import datetime, timedelta
-import sqlite3
+import aiosqlite
 import logging
+from datetime import datetime, timedelta
+from aiogram import Router, types, F
+from aiogram.filters import Command
 
 dailyreward_router = Router()
 
@@ -25,31 +25,29 @@ async def give_daily_bonus(user_id: int) -> tuple[bool, int, int, str]:
     :return: (успех, новый стрик, полученный бонус, время до следующего бонуса)
     """
     try:
-        with sqlite3.connect("bot_database.db") as conn:
-            cursor = conn.cursor()
-
-            # Получаем данные пользователя
-            cursor.execute("""
+        async with aiosqlite.connect("bot_database.db") as conn:
+            cursor = await conn.execute("""
                 SELECT last_claimed, daily_streak 
                 FROM users 
                 WHERE user_id = ?
             """, (user_id,))
-            user_data = cursor.fetchone()
+            user_data = await cursor.fetchone()
+
+            now = datetime.now()
 
             if not user_data or not user_data[0]:
                 # Если данных нет, создаем начальную запись
-                cursor.execute("""
+                await conn.execute("""
                     UPDATE users
                     SET last_claimed = ?, daily_streak = 1, spins = spins + 1
                     WHERE user_id = ?
                 """, (get_current_time(), user_id))
-                conn.commit()
-                return True, 1, 1, ""  # Выдан 1 бонус, и время до следующего бонуса - пусто
+                await conn.commit()
+                return True, 1, 1, ""  # Выдан 1 бонус, время до следующего бонуса - пусто
 
             last_claimed, daily_streak = user_data
             last_claimed_time = datetime.strptime(last_claimed, '%Y-%m-%d %H:%M:%S')
 
-            now = datetime.now()
             hours_since_last_claim = (now - last_claimed_time).total_seconds() / 3600
 
             if hours_since_last_claim < 24:
@@ -63,12 +61,12 @@ async def give_daily_bonus(user_id: int) -> tuple[bool, int, int, str]:
             # Вычисляем бонус (1-7 прокруток в зависимости от стрика)
             bonus = calculate_bonus(daily_streak + 1)
 
-            cursor.execute("""
+            await conn.execute("""
                 UPDATE users
                 SET last_claimed = ?, daily_streak = ?, spins = spins + ?
                 WHERE user_id = ?
             """, (get_current_time(), daily_streak + 1, bonus, user_id))
-            conn.commit()
+            await conn.commit()
 
             return True, daily_streak + 1, bonus, ""  # ✅ Теперь возвращает только бонус и пустую строку для времени
     except Exception as e:
@@ -77,6 +75,7 @@ async def give_daily_bonus(user_id: int) -> tuple[bool, int, int, str]:
 
 # Хендлер команды /daily
 @dailyreward_router.message(Command("daily"))
+@dailyreward_router.message(F.text.lower() == "дейли")
 async def daily_reward(message: types.Message):
     user_id = message.from_user.id
     success, streak, bonus, remaining_time = await give_daily_bonus(user_id)

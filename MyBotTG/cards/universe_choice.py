@@ -1,37 +1,26 @@
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-
-import sqlite3
+import aiosqlite
 
 AVAILABLE_UNIVERSES = ["marvel", "star_wars", "dc"]
 
 universechoice_router = Router()
 
 
-async def get_user_universe(user_id: int) -> str:
+async def get_user_universe(user_id: int) -> str | None:
     """Получаем выбранную вселенную пользователя из базы данных."""
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
-
-    conn.close()
-
-    return result[0] if result else None  # Возвращаем выбранную вселенную или None
+    async with aiosqlite.connect("bot_database.db") as db:
+        async with db.execute("SELECT selected_universe FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            result = await cursor.fetchone()
+    return result[0] if result else None
 
 
 async def set_user_universe(user_id: int, universe: str):
     """Сохраняем выбранную вселенную пользователя в базе данных."""
-    conn = sqlite3.connect("bot_database.db")
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "UPDATE users SET selected_universe = ? WHERE user_id = ?", (universe, user_id)
-    )
-    conn.commit()
-    conn.close()
+    async with aiosqlite.connect("bot_database.db") as db:
+        await db.execute("UPDATE users SET selected_universe = ? WHERE user_id = ?", (universe, user_id))
+        await db.commit()
 
 
 # Команда для выбора вселенной
@@ -44,29 +33,23 @@ async def select_universe(message: types.Message):
     current_universe = await get_user_universe(user_id)
     if current_universe:
         await message.answer(
-            f"Вы уже выбрали вселенную {current_universe.capitalize()}.",
-            reply_markup=ReplyKeyboardRemove(),  # Убираем реплай-кнопки, если были
+            f"✅ Вы уже выбрали вселенную *{current_universe.capitalize()}*.",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
-    # Генерируем кнопки
+    # Генерируем кнопки выбора вселенной
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=universe.capitalize())]
-            for universe in AVAILABLE_UNIVERSES
-        ],
+        keyboard=[[KeyboardButton(text=universe.capitalize())] for universe in AVAILABLE_UNIVERSES],
         resize_keyboard=True,
     )
 
-    await message.answer(
-        "Выберите вселенную, чтобы получать карты:", reply_markup=keyboard
-    )
+    await message.answer("🌌 *Выберите вселенную, чтобы получать карты:*", parse_mode="Markdown", reply_markup=keyboard)
 
 
 # Обработчик выбора вселенной
-@universechoice_router.message(
-    F.text.lower().in_([u.lower() for u in AVAILABLE_UNIVERSES])
-)
+@universechoice_router.message(F.text.lower().in_([u.lower() for u in AVAILABLE_UNIVERSES]))
 async def universe_chosen(message: types.Message):
     user_id = message.from_user.id
     chosen_universe = message.text.lower()
@@ -75,8 +58,9 @@ async def universe_chosen(message: types.Message):
     current_universe = await get_user_universe(user_id)
     if current_universe == chosen_universe:
         await message.answer(
-            f"Вы уже выбрали вселенную {chosen_universe.capitalize()}.",
-            reply_markup=ReplyKeyboardRemove(),  # Убираем реплай-кнопки
+            f"✅ Вы уже выбрали вселенную *{chosen_universe.capitalize()}*.",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -84,6 +68,7 @@ async def universe_chosen(message: types.Message):
     await set_user_universe(user_id, chosen_universe)
 
     await message.answer(
-        f"Вы успешно выбрали вселенную {chosen_universe.capitalize()}.",
-        reply_markup=ReplyKeyboardRemove(),  # Убираем реплай-кнопки
+        f"🌟 Вы успешно выбрали вселенную *{chosen_universe.capitalize()}*.",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove(),
     )

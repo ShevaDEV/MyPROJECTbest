@@ -1,6 +1,10 @@
 import aiosqlite
+import logging
 
 DB_PATH = "bot_database.db"
+
+logging.basicConfig(level=logging.INFO)
+
 
 class Database:
     """Класс управления базой данных (Singleton)."""
@@ -11,17 +15,20 @@ class Database:
 
     async def init_db(self):
         """Инициализация базы данных: создание таблиц."""
-        if self.ready:  # Если БД уже инициализирована, повторно не выполняем
-            print("✅ База данных уже инициализирована.")
+        if self.ready:
+            logging.info("✅ База данных уже инициализирована.")
             return
 
-        print("🚀 Запуск инициализации базы данных...")
+        logging.info("🚀 Запуск инициализации базы данных...")
 
         async with aiosqlite.connect(DB_PATH) as db:
-            db.row_factory = aiosqlite.Row  # Упрощает доступ к данным через dict-like интерфейс
-            print("📂 Подключение к БД установлено.")
+            db.row_factory = aiosqlite.Row  # Доступ к данным через dict-like интерфейс
+            logging.info("📂 Подключение к БД установлено.")
 
+            # Создаём таблицы
             await db.executescript("""
+            PRAGMA foreign_keys = ON;
+
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 username TEXT,
@@ -80,10 +87,51 @@ class Database:
                 FOREIGN KEY (referral_id) REFERENCES users (user_id),
                 FOREIGN KEY (referrer_id) REFERENCES users (user_id)
             );
+
+            CREATE TABLE IF NOT EXISTS moderation (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                chat_id INTEGER, 
+                user_id INTEGER, 
+                username TEXT DEFAULT NULL,
+                mute_until INTEGER DEFAULT 0,
+                ban_until INTEGER DEFAULT 0,  
+                ban_status BOOLEAN DEFAULT 0,
+                reason TEXT, 
+                moderator_id INTEGER, 
+                timestamp INTEGER DEFAULT (strftime('%s', 'now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS warns_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                user_id INTEGER,
+                reason TEXT,
+                moderator_id INTEGER,
+                timestamp INTEGER,
+                expire_at INTEGER,
+                FOREIGN KEY (chat_id, user_id) REFERENCES moderation (chat_id, user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_users (
+                user_id INTEGER,
+                chat_id INTEGER,
+                username TEXT,
+                full_name TEXT,
+                left BOOLEAN DEFAULT 0, 
+                PRIMARY KEY (user_id, chat_id)
+            );
             """)
 
-            # 🔹 Добавляем начальные вселенные, если их нет
-            print("🌌 Добавляем стандартные вселенные...")
+            # Добавляем индексы для оптимизации запросов
+            await db.executescript("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_moderation ON moderation(chat_id, user_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_warns ON warns_log(chat_id, user_id, timestamp);
+            CREATE INDEX IF NOT EXISTS idx_chat_users_chat_id ON chat_users(chat_id);
+            CREATE INDEX IF NOT EXISTS idx_chat_users_user_id ON chat_users(user_id);
+            """)
+
+            # Добавляем начальные вселенные, если их нет
+            logging.info("🌌 Добавляем стандартные вселенные...")
             await db.executemany("""
                 INSERT OR IGNORE INTO universes (universe_id, name, enabled)
                 VALUES (?, ?, ?)
@@ -93,13 +141,16 @@ class Database:
             ])
 
             await db.commit()
-        
-        self.ready = True  # ✅ База данных готова!
-        print("✅ База данных успешно инициализирована.")
+
+        self.ready = True
+        logging.info("✅ База данных успешно инициализирована.")
 
     async def get_connection(self):
-        """Всегда создаёт новое соединение с БД."""
-        return await aiosqlite.connect(DB_PATH)
+        """Создаёт новое соединение с БД."""
+        conn = await aiosqlite.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = aiosqlite.Row
+        return conn
 
-# ✅ Создаём единственный экземпляр БД
+
+# Создаём единственный экземпляр БД
 db_instance = Database()
