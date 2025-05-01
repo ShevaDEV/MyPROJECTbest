@@ -1,0 +1,50 @@
+# Системные файлы
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Секретные файлы
+.env
+config.py
+
+# Виртуальная среда (например, venv)
+venv/
+__pycache__/
+
+# Папки и файлы для IDE и редакторов
+.vscode/
+.idea/
+
+# Логи
+*.log
+
+# Артефакты сборки и кэш
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+
+# Папки и файлы для тестов, если таковые есть
+*.coverage
+*.hypothesis/
+*.tox/
+nosetests.xml
+coverage.xml
+
+# Папки для билдов
+build/
+dist/
+.eggs/
+
+# Бэкапы
+*~
+*.bak
+*.tmp
+
+# Другие файлы, не требующиеся в репозитории
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.7z
