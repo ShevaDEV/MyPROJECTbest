@@ -34,11 +34,11 @@ dp = Dispatcher(storage=MemoryStorage(), fsm_strategy=FSMStrategy.CHAT)
 # from handlers.usershand.referal import referal_router
 # from handlers.satefy.warn import warn_router
 # from handlers.stats.crocodile import crocodile_router
- #from handlers.satefy.welcome import welcome_router
+from handlers.stats.welcome import welcome_router
 # from handlers.satefy.lock import lock_router
 # from handlers.satefy.purge import purge_router
-# from handlers.satefy.rules import rules_router
-# from handlers.stats.messages import stats_router
+from handlers.stats.rules import rules_router
+from handlers.stats.messages import stats_router
 # from handlers.satefy.mute import mute_router
 # from handlers.satefy.kick import kick_router
 # from handlers.satefy.ban import ban_router
@@ -67,11 +67,11 @@ from handlers.satefy.event_users import event_router
 # dp.include_router(list_router)
 # dp.include_router(warn_router)
 # dp.include_router(crocodile_router)
-# dp.include_router(welcome_router)
+dp.include_router(welcome_router)
 # dp.include_router(lock_router)
 # dp.include_router(purge_router)
-#dp.include_router(rules_router)
-# dp.include_router(stats_router)
+dp.include_router(rules_router)
+dp.include_router(stats_router)
 # dp.include_router(mute_router)
 # dp.include_router(kick_router)
 # dp.include_router(ban_router)

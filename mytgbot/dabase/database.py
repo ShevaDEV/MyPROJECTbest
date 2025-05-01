@@ -117,7 +117,34 @@ class Database:
                 chat_id INTEGER,
                 username TEXT,
                 full_name TEXT,
-                left BOOLEAN DEFAULT 0, 
+                left BOOLEAN DEFAULT 0,
+                role TEXT DEFAULT 'member',
+                PRIMARY KEY (user_id, chat_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                message_id INTEGER,
+                chat_id INTEGER,
+                user_id INTEGER,
+                timestamp INTEGER,
+                PRIMARY KEY (message_id, chat_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_settings (
+                chat_id INTEGER PRIMARY KEY,
+                purge_period INTEGER DEFAULT 86400,  -- 24 часа по умолчанию в секундах
+                rules TEXT DEFAULT NULL,
+                is_locked INTEGER DEFAULT 0,  -- ✅ 0 = открыт, 1 = закрыт
+                welcome_text TEXT DEFAULT NULL,
+                welcome_media TEXT DEFAULT NULL,
+                last_updated INTEGER DEFAULT (strftime('%s', 'now')),
+                moderator_id INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS crocodile_scores (
+                user_id INTEGER,
+                chat_id INTEGER,
+                score INTEGER DEFAULT 0,
                 PRIMARY KEY (user_id, chat_id)
             );
             """)
@@ -128,6 +155,9 @@ class Database:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_warns ON warns_log(chat_id, user_id, timestamp);
             CREATE INDEX IF NOT EXISTS idx_chat_users_chat_id ON chat_users(chat_id);
             CREATE INDEX IF NOT EXISTS idx_chat_users_user_id ON chat_users(user_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_chat_id_timestamp ON messages(chat_id, timestamp);
+            CREATE INDEX IF NOT EXISTS idx_chat_rules_chat_id ON chat_settings(chat_id);
+            CREATE INDEX IF NOT EXISTS idx_crocodile_scores_user_id_chat_id ON crocodile_scores(user_id, chat_id);
             """)
 
             # Добавляем начальные вселенные, если их нет
